@@ -22,7 +22,7 @@ try:
     WAND_AVAILABLE = True
 except:
     WAND_AVAILABLE = False
-    
+
 class ImageEngine:
     """Engine for image operations"""
     
@@ -180,63 +180,64 @@ class ImageEngine:
     
     def images_to_pdf(self, input_paths, output_folder):
         """
-        Convert multiple images to PDF
-        
-        Args:
-            input_paths: List of image file paths
-            output_folder: Output directory
-            
-        Returns:
-            dict: Result with output path
+        Convert multiple images to PDF (Render-safe)
         """
         try:
-            # Prepare images for PDF conversion
-            image_list = []
-            
-            for img_path in input_paths:
-                with Image.open(img_path) as img:
-                    # Convert to RGB if necessary
-                    if img.mode == 'RGBA':
-                        rgb_img = Image.new('RGB', img.size, (255, 255, 255))
-                        rgb_img.paste(img, mask=img.split()[3])
-                        
-                        # Save temporary RGB version
-                        temp_path = os.path.join(output_folder, f"temp_{uuid.uuid4()}.jpg")
-                        rgb_img.save(temp_path, 'JPEG')
-                        image_list.append(temp_path)
-                    elif img.mode != 'RGB':
-                        # Convert other modes to RGB
-                        rgb_img = img.convert('RGB')
-                        temp_path = os.path.join(output_folder, f"temp_{uuid.uuid4()}.jpg")
-                        rgb_img.save(temp_path, 'JPEG')
-                        image_list.append(temp_path)
-                    else:
-                        image_list.append(img_path)
-            
             output_filename = f"images_to_pdf_{uuid.uuid4()}.pdf"
             output_path = os.path.join(output_folder, output_filename)
-            
-            # Create PDF
-            with open(output_path, 'wb') as f:
-                f.write(img2pdf.convert(image_list))
-            
-            # Clean up temporary files
-            for img_path in image_list:
-                if 'temp_' in img_path:
-                    try:
-                        os.remove(img_path)
-                    except:
-                        pass
-            
+
+            # ✅ If img2pdf available (local / VPS)
+            if IMG2PDF_AVAILABLE:
+                image_list = []
+
+                for img_path in input_paths:
+                    with Image.open(img_path) as img:
+                        if img.mode != "RGB":
+                            img = img.convert("RGB")
+
+                        temp_path = os.path.join(output_folder, f"temp_{uuid.uuid4()}.jpg")
+                        img.save(temp_path, "JPEG")
+                        image_list.append(temp_path)
+
+                with open(output_path, "wb") as f:
+                    f.write(img2pdf.convert(image_list))
+
+                # cleanup temp files
+                for path in image_list:
+                    if "temp_" in path:
+                        try:
+                            os.remove(path)
+                        except:
+                            pass
+
+            # ✅ Fallback (Render-safe using Pillow)
+            else:
+                images = []
+
+                for img_path in input_paths:
+                    img = Image.open(img_path)
+                    if img.mode != "RGB":
+                        img = img.convert("RGB")
+                    images.append(img)
+
+                if not images:
+                    return {"success": False, "error": "No valid images"}
+
+                images[0].save(
+                    output_path,
+                    save_all=True,
+                    append_images=images[1:]
+                )
+
             return {
-                'success': True,
-                'output_path': output_path
+                "success": True,
+                "output_path": output_path
             }
-        
+
         except Exception as e:
             return {
-                'success': False,
-                'error': str(e)
+                "success": False,
+                "error": str(e)
             }
     
     def crop(self, input_path, left, top, right, bottom, output_folder):
