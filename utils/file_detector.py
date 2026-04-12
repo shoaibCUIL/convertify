@@ -67,3 +67,24 @@ def get_file_info(file_path):
             "type": "unknown",
             "extension": "",
         }
+    
+def can_convert(input_type, output_type):
+    """
+    Basic conversion validation (you can expand later)
+    """
+    if not input_type or not output_type:
+        return False
+
+    # Simple rules (customize if needed)
+    supported_conversions = {
+        "application/pdf": [
+            "image/png",
+            "image/jpeg",
+            "text/plain",
+        ],
+        "image/jpeg": ["application/pdf"],
+        "image/png": ["application/pdf"],
+        "text/plain": ["application/pdf"],
+    }
+
+    return output_type in supported_conversions.get(input_type, [])
