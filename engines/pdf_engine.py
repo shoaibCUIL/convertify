@@ -6,16 +6,34 @@ Handles all PDF-related operations: merge, split, compress, convert, etc.
 import os
 import uuid
 from PyPDF2 import PdfReader, PdfWriter, PdfMerger
-import pikepdf
-import img2pdf
-from pdf2image import convert_from_path
+
+# Safe imports (Render compatible)
+try:
+    import pikepdf
+    PIKEPDF_AVAILABLE = True
+except:
+    PIKEPDF_AVAILABLE = False
+
+try:
+    from pdf2image import convert_from_path
+    PDF2IMAGE_AVAILABLE = True
+except:
+    PDF2IMAGE_AVAILABLE = False
+
+try:
+    import img2pdf
+    IMG2PDF_AVAILABLE = True
+except:
+    IMG2PDF_AVAILABLE = False
+
+try:
+    import pdfplumber
+    PDFPLUMBER_AVAILABLE = True
+except:
+    PDFPLUMBER_AVAILABLE = False
+
 from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.lib.utils import ImageReader
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-import pdfplumber
-from PIL import Image
+from reportlab.lib.colors import Color
 
 
 class PDFEngine:
