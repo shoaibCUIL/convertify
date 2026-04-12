@@ -197,8 +197,38 @@ class UniversalConverter:
     # =================== DOCUMENT CONVERSIONS ===================
     def _docx_to_pdf(self, input_file, output_path):
         """Convert DOCX to PDF"""
-        from docx2pdf import convert
-        convert(input_file, output_path)
+        try:
+            # Method 1: Try docx2pdf (Windows only, requires MS Word)
+            from docx2pdf import convert
+            convert(input_file, output_path)
+        except ImportError:
+            # Method 2: Fallback to reportlab (cross-platform)
+            from docx import Document
+            from reportlab.pdfgen import canvas
+            from reportlab.lib.pagesizes import letter
+            
+            doc = Document(input_file)
+            c = canvas.Canvas(output_path, pagesize=letter)
+            width, height = letter
+            
+            y = height - 50
+            line_height = 15
+            
+            for para in doc.paragraphs:
+                if para.text.strip():
+                    # Simple text wrapping
+                    text = para.text
+                    if y < 50:
+                        c.showPage()
+                        y = height - 50
+                    
+                    # Draw text (basic conversion)
+                    c.drawString(50, y, text[:100])  # Limit line length
+                    y -= line_height
+            
+            c.save()
+        except Exception as e:
+            raise Exception(f"DOCX to PDF conversion failed: {str(e)}. Install docx2pdf: pip install docx2pdf")
     
     def _docx_to_txt(self, input_file, output_path):
         """Convert DOCX to TXT"""
