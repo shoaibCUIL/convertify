@@ -1,132 +1,197 @@
-"""
-Document Engine
-Handles document conversions (DOCX, XLSX, PPTX, etc.) using LibreOffice
-"""
-
 import os
 import uuid
-import subprocess
+
+from PyPDF2 import PdfReader
+from docx import Document
+from reportlab.pdfgen import canvas
 
 
 class DocumentEngine:
     """Engine for document conversions"""
-    
-    def convert_format(self, input_path, target_format, output_folder):
-        """
-        Convert document to different format using LibreOffice
-        
-        Args:
-            input_path: Document file path
-            target_format: Target format (pdf, docx, txt, html, etc.)
-            output_folder: Output directory
-            
-        Returns:
-            dict: Result with output path
-        """
+
+    # =========================
+    # MAIN CONVERTER
+    # =========================
+    def convert(self, input_path, output_format, output_folder):
         try:
-            # Use LibreOffice headless for conversion
-            cmd = [
-                'libreoffice',
-                '--headless',
-                '--convert-to', target_format,
-                '--outdir', output_folder,
-                input_path
-            ]
-            
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-            
-            if result.returncode != 0:
+            ext = os.path.splitext(input_path)[1].lower()
+
+            if ext == ".pdf" and output_format == "docx":
+                return self.pdf_to_docx(input_path, output_folder)
+
+            elif ext == ".docx" and output_format == "pdf":
+                return self.docx_to_pdf(input_path, output_folder)
+
+            elif ext == ".txt" and output_format == "docx":
+                return self.txt_to_docx(input_path, output_folder)
+
+            elif ext == ".docx" and output_format == "txt":
+                return self.docx_to_txt(input_path, output_folder)
+
+            else:
                 return {
-                    'success': False,
-                    'error': f'LibreOffice conversion error: {result.stderr}'
+                    "success": False,
+                    "error": f"Conversion not supported: {ext} → {output_format}"
                 }
-            
-            # Find the output file
-            base_name = os.path.splitext(os.path.basename(input_path))[0]
-            output_filename = f"{base_name}.{target_format}"
-            output_path = os.path.join(output_folder, output_filename)
-            
-            # Rename to unique filename
-            if os.path.exists(output_path):
-                unique_filename = f"converted_{uuid.uuid4()}.{target_format}"
-                unique_path = os.path.join(output_folder, unique_filename)
-                os.rename(output_path, unique_path)
-                output_path = unique_path
-            
-            if not os.path.exists(output_path):
-                return {
-                    'success': False,
-                    'error': 'Conversion completed but output file not found'
-                }
-            
-            return {
-                'success': True,
-                'output_path': output_path
-            }
-        
-        except subprocess.TimeoutExpired:
-            return {
-                'success': False,
-                'error': 'Conversion timeout - file may be too large or complex'
-            }
+
         except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    # =========================
+    # PDF → DOCX
+    # =========================
+    def pdf_to_docx(self, input_path, output_folder):
+        try:
+            reader = PdfReader(input_path)
+            doc = Document()
+
+            for page in reader.pages:
+                text = page.extract_text()
+                if text:
+                    doc.add_paragraph(text)
+
+            output_filename = f"pdf_to_docx_{uuid.uuid4()}.docx"
+            output_path = os.path.join(output_folder, output_filename)
+
+            doc.save(output_path)
+
             return {
-                'success': False,
-                'error': str(e)
+                "success": True,
+                "output_path": output_path
             }
-    
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    # =========================
+    # DOCX → PDF (Simple)
+    # =========================
     def docx_to_pdf(self, input_path, output_folder):
-        """Convert DOCX to PDF"""
-        return self.convert_format(input_path, 'pdf', output_folder)
-    
-    def xlsx_to_pdf(self, input_path, output_folder):
-        """Convert XLSX to PDF"""
-        return self.convert_format(input_path, 'pdf', output_folder)
-    
-    def pptx_to_pdf(self, input_path, output_folder):
-        """Convert PPTX to PDF"""
-        return self.convert_format(input_path, 'pdf', output_folder)
-    
+        try:
+            doc = Document(input_path)
+
+            output_filename = f"docx_to_pdf_{uuid.uuid4()}.pdf"
+            output_path = os.path.join(output_folder, output_filename)
+
+            c = canvas.Canvas(output_path)
+
+            y = 800
+
+            for para in doc.paragraphs:
+                text = para.text.strip()
+
+                if not text:
+                    continue
+
+                if y < 50:
+                    c.showPage()
+                    y = 800
+
+                c.drawString(50, y, text)
+                y -= 20
+
+            c.save()
+
+            return {
+                "success": True,
+                "output_path": output_path
+            }
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    # =========================
+    # TXT → DOCX
+    # =========================
+    def txt_to_docx(self, input_path, output_folder):
+        try:
+            doc = Document()
+
+            with open(input_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    doc.add_paragraph(line.strip())
+
+            output_filename = f"txt_to_docx_{uuid.uuid4()}.docx"
+            output_path = os.path.join(output_folder, output_filename)
+
+            doc.save(output_path)
+
+            return {
+                "success": True,
+                "output_path": output_path
+            }
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    # =========================
+    # DOCX → TXT
+    # =========================
     def docx_to_txt(self, input_path, output_folder):
-        """Convert DOCX to TXT"""
-        return self.convert_format(input_path, 'txt', output_folder)
-    
-    def xlsx_to_csv(self, input_path, output_folder):
-        """Convert XLSX to CSV"""
-        return self.convert_format(input_path, 'csv', output_folder)
-    
-    def doc_to_docx(self, input_path, output_folder):
-        """Convert old DOC to DOCX"""
-        return self.convert_format(input_path, 'docx', output_folder)
-    
-    def xls_to_xlsx(self, input_path, output_folder):
-        """Convert old XLS to XLSX"""
-        return self.convert_format(input_path, 'xlsx', output_folder)
-    
-    def ppt_to_pptx(self, input_path, output_folder):
-        """Convert old PPT to PPTX"""
-        return self.convert_format(input_path, 'pptx', output_folder)
-    
-    def rtf_to_docx(self, input_path, output_folder):
-        """Convert RTF to DOCX"""
-        return self.convert_format(input_path, 'docx', output_folder)
-    
-    def odt_to_docx(self, input_path, output_folder):
-        """Convert ODT to DOCX"""
-        return self.convert_format(input_path, 'docx', output_folder)
-    
-    def ods_to_xlsx(self, input_path, output_folder):
-        """Convert ODS to XLSX"""
-        return self.convert_format(input_path, 'xlsx', output_folder)
-    
-    def odp_to_pptx(self, input_path, output_folder):
-        """Convert ODP to PPTX"""
-        return self.convert_format(input_path, 'pptx', output_folder)
-    
-    def html_to_pdf(self, input_path, output_folder):
-        """Convert HTML to PDF"""
-        return self.convert_format(input_path, 'pdf', output_folder)
-    
-    def docx_to_html(self, input_path, output_folder):
-        """Convert DOCX to HTML"""
-        return self.convert_format(input_path, 'html', output_folder)
+        try:
+            doc = Document(input_path)
+
+            output_filename = f"docx_to_txt_{uuid.uuid4()}.txt"
+            output_path = os.path.join(output_folder, output_filename)
+
+            with open(output_path, "w", encoding="utf-8") as f:
+                for para in doc.paragraphs:
+                    f.write(para.text + "\n")
+
+            return {
+                "success": True,
+                "output_path": output_path
+            }
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    # =========================
+    # TEXT EXTRACTION
+    # =========================
+    def extract_text(self, input_path):
+        try:
+            ext = os.path.splitext(input_path)[1].lower()
+
+            if ext == ".pdf":
+                reader = PdfReader(input_path)
+                text = ""
+
+                for page in reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+
+                return {"success": True, "text": text}
+
+            elif ext == ".docx":
+                doc = Document(input_path)
+                text = "\n".join([p.text for p in doc.paragraphs])
+                return {"success": True, "text": text}
+
+            elif ext == ".txt":
+                with open(input_path, "r", encoding="utf-8") as f:
+                    return {"success": True, "text": f.read()}
+
+            else:
+                return {"success": False, "error": "Unsupported file"}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    # =========================
+    # FILE INFO
+    # =========================
+    def get_file_info(self, input_path):
+        try:
+            size = os.path.getsize(input_path)
+            ext = os.path.splitext(input_path)[1].lower()
+
+            return {
+                "success": True,
+                "file_type": ext,
+                "size_bytes": size
+            }
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
