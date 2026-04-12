@@ -1,690 +1,578 @@
-// Universal File Converter - Main JavaScript
-
-const API_BASE = '/api';
-let uploadedFiles = [];
-let convertedFiles = [];
-
-// DOM Elements
-const dropzone = document.getElementById('dropzone');
-const fileInput = document.getElementById('fileInput');
-const fileList = document.getElementById('fileList');
-const toolButtons = document.querySelectorAll('.tool-btn');
-const toolPanels = document.querySelectorAll('.tool-panel');
-const progressSection = document.getElementById('progressSection');
-const progressBar = document.getElementById('progressBar');
-const progressText = document.getElementById('progressText');
-const resultsSection = document.getElementById('resultsSection');
-const resultsList = document.getElementById('resultsList');
-const modalOverlay = document.getElementById('modalOverlay');
-const modalTitle = document.getElementById('modalTitle');
-const modalBody = document.getElementById('modalBody');
-const modalFooter = document.getElementById('modalFooter');
-const modalClose = document.getElementById('modalClose');
-
-// Initialize
-document.addEventListener('DOMContentLoaded', () => {
-    setupEventListeners();
-});
-
-// Event Listeners
-function setupEventListeners() {
-    // Dropzone
-    dropzone.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', handleFileSelect);
-    
-    dropzone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropzone.classList.add('dragover');
-    });
-    
-    dropzone.addEventListener('dragleave', () => {
-        dropzone.classList.remove('dragover');
-    });
-    
-    dropzone.addEventListener('drop', handleFileDrop);
-    
-    // Tool navigation
-    toolButtons.forEach(btn => {
-        btn.addEventListener('click', () => switchTool(btn.dataset.tool));
-    });
-    
-    // Convert button
-    document.getElementById('convertBtn')?.addEventListener('click', handleConvert);
-    
-    // OCR button
-    document.getElementById('ocrBtn')?.addEventListener('click', handleOCR);
-    
-    // PDF tool actions
-    document.querySelectorAll('.tool-action-btn').forEach(btn => {
-        btn.addEventListener('click', () => handleToolAction(btn.dataset.action));
-    });
-    
-    // Results actions
-    document.getElementById('downloadAllBtn')?.addEventListener('click', downloadAllAsZip);
-    document.getElementById('clearResultsBtn')?.addEventListener('click', clearResults);
-    
-    // Modal
-    modalClose.addEventListener('click', closeModal);
-    modalOverlay.addEventListener('click', (e) => {
-        if (e.target === modalOverlay) closeModal();
-    });
-}
-
-// File Selection
-function handleFileSelect(e) {
-    const files = Array.from(e.target.files);
-    uploadFiles(files);
-}
-
-function handleFileDrop(e) {
-    e.preventDefault();
-    dropzone.classList.remove('dragover');
-    
-    const files = Array.from(e.dataTransfer.files);
-    uploadFiles(files);
-}
-
-// Upload Files
-async function uploadFiles(files) {
-    for (const file of files) {
-        await uploadSingleFile(file);
+// Tab Management
+function openTab(tabName) {
+    const contents = document.getElementsByClassName('tab-content');
+    for (let content of contents) {
+        content.classList.remove('active');
     }
+    
+    const buttons = document.getElementsByClassName('tab-button');
+    for (let button of buttons) {
+        button.classList.remove('active');
+    }
+    
+    document.getElementById(tabName).classList.add('active');
+    event.target.classList.add('active');
 }
 
-async function uploadSingleFile(file) {
+// Show/hide loading
+function showLoading() {
+    document.getElementById('loading').style.display = 'flex';
+}
+
+function hideLoading() {
+    document.getElementById('loading').style.display = 'none';
+}
+
+// Show results
+function showResult(message, isError = false) {
+    const resultDiv = document.getElementById('resultContent');
+    resultDiv.innerHTML = `<div class="${isError ? 'error' : 'success'}">${message}</div>`;
+}
+
+function showDownloadLink(filename, displayName = null) {
+    const resultDiv = document.getElementById('resultContent');
+    const name = displayName || filename;
+    resultDiv.innerHTML += `<a href="/api/download/${filename}" class="download-link" download>📥 Download ${name}</a>`;
+}
+
+// Upload file
+async function uploadFile(fileInput) {
+    const file = fileInput.files[0];
+    if (!file) {
+        showResult('Please select a file', true);
+        return null;
+    }
+    
     const formData = new FormData();
     formData.append('file', file);
     
     try {
-        const response = await fetch(`${API_BASE}/upload`, {
+        const response = await fetch('/api/upload', {
             method: 'POST',
             body: formData
         });
         
         const data = await response.json();
         
-        if (data.success) {
-            uploadedFiles.push(data);
-            addFileToList(data);
-        } else {
-            showError(data.error || 'Upload failed');
+        if (!response.ok) {
+            throw new Error(data.error || 'Upload failed');
         }
+        
+        return data.filename;
     } catch (error) {
-        showError('Upload error: ' + error.message);
+        showResult(`Upload error: ${error.message}`, true);
+        return null;
     }
 }
 
-function addFileToList(fileData) {
-    const fileItem = document.createElement('div');
-    fileItem.className = 'file-item';
-    fileItem.dataset.fileId = fileData.file_id;
-    
-    const icon = getFileIcon(fileData.file_type);
-    
-    fileItem.innerHTML = `
-        <div class="file-info-wrapper">
-            <div class="file-icon">${icon}</div>
-            <div class="file-details">
-                <h4>${fileData.original_filename}</h4>
-                <div class="file-meta">
-                    ${fileData.file_type.toUpperCase()} • ${fileData.size_formatted}
-                </div>
-            </div>
-        </div>
-        <div class="file-actions">
-            <button class="btn-icon btn-delete" onclick="removeFile('${fileData.file_id}')">
-                🗑️
-            </button>
-        </div>
-    `;
-    
-    fileList.appendChild(fileItem);
-}
-
-function getFileIcon(fileType) {
-    const icons = {
-        'pdf': '📄',
-        'image': '🖼️',
-        'video': '🎥',
-        'audio': '🎵',
-        'document': '📝',
-        'spreadsheet': '📊',
-        'presentation': '📽️',
-        'text': '📃',
-        'archive': '📦',
-        'other': '📎'
-    };
-    return icons[fileType] || icons['other'];
-}
-
-function removeFile(fileId) {
-    uploadedFiles = uploadedFiles.filter(f => f.file_id !== fileId);
-    const fileItem = document.querySelector(`[data-file-id="${fileId}"]`);
-    if (fileItem) fileItem.remove();
-}
-
-// Tool Switching
-function switchTool(toolName) {
-    toolButtons.forEach(btn => btn.classList.remove('active'));
-    toolPanels.forEach(panel => panel.classList.remove('active'));
-    
-    const activeBtn = document.querySelector(`[data-tool="${toolName}"]`);
-    const activePanel = document.getElementById(`panel-${toolName}`);
-    
-    if (activeBtn) activeBtn.classList.add('active');
-    if (activePanel) activePanel.classList.add('active');
-}
-
-// Universal Convert
-async function handleConvert() {
-    if (uploadedFiles.length === 0) {
-        showError('Please upload a file first');
-        return;
-    }
-    
+// Convert File
+async function convertFile() {
+    const fileInput = document.getElementById('convertFile');
     const targetFormat = document.getElementById('targetFormat').value;
+    
     if (!targetFormat) {
-        showError('Please select a target format');
+        showResult('Please select a target format', true);
         return;
     }
     
-    showProgress('Converting file...');
+    showLoading();
+    const filename = await uploadFile(fileInput);
+    
+    if (!filename) {
+        hideLoading();
+        return;
+    }
     
     try {
-        for (const file of uploadedFiles) {
-            const response = await fetch(`${API_BASE}/convert`, {
+        const response = await fetch('/api/convert', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename, target_format: targetFormat })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Conversion failed');
+        }
+        
+        showResult(data.message);
+        showDownloadLink(data.output_file);
+    } catch (error) {
+        showResult(`Conversion error: ${error.message}`, true);
+    } finally {
+        hideLoading();
+    }
+}
+
+// Rotate PDF
+async function rotatePDF() {
+    const fileInput = document.getElementById('editFile');
+    const angle = document.getElementById('rotateAngle').value;
+    const pages = document.getElementById('rotatePages').value || 'all';
+    
+    showLoading();
+    const filename = await uploadFile(fileInput);
+    
+    if (!filename) {
+        hideLoading();
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/pdf/rotate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename, angle: parseInt(angle), pages })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Rotation failed');
+        }
+        
+        showResult('PDF rotated successfully');
+        showDownloadLink(data.output_file);
+    } catch (error) {
+        showResult(`Rotation error: ${error.message}`, true);
+    } finally {
+        hideLoading();
+    }
+}
+
+// Merge Files
+async function mergeFiles() {
+    const fileInput = document.getElementById('mergeFiles');
+    const files = fileInput.files;
+    
+    if (files.length < 2) {
+        showResult('Please select at least 2 files to merge', true);
+        return;
+    }
+    
+    showLoading();
+    const uploadedFiles = [];
+    
+    for (let file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        try {
+            const response = await fetch('/api/upload', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    filename: file.filename,
-                    target_format: targetFormat
-                })
+                body: formData
             });
-            
             const data = await response.json();
-            
-            if (data.success) {
-                convertedFiles.push({
-                    filename: data.output_filename,
-                    originalName: file.original_filename
-                });
-            } else {
-                showError(data.error || 'Conversion failed');
-            }
+            uploadedFiles.push(data.filename);
+        } catch (error) {
+            showResult(`Upload error: ${error.message}`, true);
+            hideLoading();
+            return;
+        }
+    }
+    
+    const mergeType = document.getElementById('mergeType').value;
+    
+    try {
+        const response = await fetch('/api/pdf/merge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ files: uploadedFiles })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Merge failed');
         }
         
-        hideProgress();
-        showResults();
+        showResult('Files merged successfully');
+        showDownloadLink(data.output_file);
     } catch (error) {
-        hideProgress();
-        showError('Conversion error: ' + error.message);
+        showResult(`Merge error: ${error.message}`, true);
+    } finally {
+        hideLoading();
     }
 }
 
-// Handle Tool Actions
-async function handleToolAction(action) {
-    if (uploadedFiles.length === 0) {
-        showError('Please upload a file first');
+// Split PDF
+async function splitPDF() {
+    const fileInput = document.getElementById('splitFile');
+    const splitType = document.getElementById('splitType').value;
+    const ranges = document.getElementById('splitRange').value;
+    
+    showLoading();
+    const filename = await uploadFile(fileInput);
+    
+    if (!filename) {
+        hideLoading();
         return;
     }
     
-    switch (action) {
-        case 'merge':
-            await mergePDFs();
-            break;
-        case 'split':
-            showSplitPDFModal();
-            break;
-        case 'compress':
-            await compressPDF();
-            break;
-        case 'to-images':
-            await pdfToImages();
-            break;
-        case 'watermark':
-            showWatermarkModal();
-            break;
-        case 'rotate':
-            showRotateModal();
-            break;
-        case 'protect':
-            showProtectModal();
-            break;
-        case 'unlock':
-            showUnlockModal();
-            break;
-        case 'page-numbers':
-            showPageNumbersModal();
-            break;
-        case 'extract-text':
-            await extractText();
-            break;
-        case 'resize':
-            showResizeModal();
-            break;
-        case 'compress-img':
-            await compressImage();
-            break;
-        case 'to-pdf':
-            await imagesToPDF();
-            break;
-        case 'extract-audio':
-            await extractAudio();
-            break;
-        default:
-            showError('Action not implemented yet');
+    try {
+        const response = await fetch('/api/pdf/split', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename, split_type: splitType, ranges })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Split failed');
+        }
+        
+        showResult(`PDF split into ${data.output_files.length} files`);
+        data.output_files.forEach((file, index) => {
+            showDownloadLink(file, `Part ${index + 1}`);
+        });
+    } catch (error) {
+        showResult(`Split error: ${error.message}`, true);
+    } finally {
+        hideLoading();
     }
 }
 
-// PDF Operations
-async function mergePDFs() {
-    if (uploadedFiles.length < 2) {
-        showError('Please upload at least 2 PDF files');
+// Compress File
+async function compressFile() {
+    const fileInput = document.getElementById('compressFile');
+    const quality = document.getElementById('compressQuality').value;
+    
+    showLoading();
+    const filename = await uploadFile(fileInput);
+    
+    if (!filename) {
+        hideLoading();
         return;
     }
     
-    showProgress('Merging PDFs...');
-    
     try {
-        const response = await fetch(`${API_BASE}/pdf/merge`, {
+        const response = await fetch('/api/pdf/compress', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                filenames: uploadedFiles.map(f => f.filename)
-            })
+            body: JSON.stringify({ filename, quality })
         });
         
         const data = await response.json();
         
-        if (data.success) {
-            convertedFiles.push({
-                filename: data.output_filename,
-                originalName: 'merged.pdf'
-            });
-            hideProgress();
-            showResults();
-        } else {
-            hideProgress();
-            showError(data.error);
+        if (!response.ok) {
+            throw new Error(data.error || 'Compression failed');
         }
+        
+        showResult(`File compressed! Size reduced by ${data.reduction_percent.toFixed(1)}%`);
+        showDownloadLink(data.output_file);
     } catch (error) {
-        hideProgress();
-        showError('Merge error: ' + error.message);
+        showResult(`Compression error: ${error.message}`, true);
+    } finally {
+        hideLoading();
     }
 }
 
-async function compressPDF() {
-    showProgress('Compressing PDF...');
+// Add Watermark
+async function addWatermark() {
+    const fileInput = document.getElementById('watermarkFile');
+    const text = document.getElementById('watermarkText').value;
+    const position = document.getElementById('watermarkPosition').value;
+    const opacity = document.getElementById('watermarkOpacity').value / 100;
+    
+    showLoading();
+    const filename = await uploadFile(fileInput);
+    
+    if (!filename) {
+        hideLoading();
+        return;
+    }
     
     try {
-        const response = await fetch(`${API_BASE}/pdf/compress`, {
+        const response = await fetch('/api/pdf/watermark', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                filename: uploadedFiles[0].filename,
-                quality: 'medium'
-            })
+            body: JSON.stringify({ filename, text, position, opacity })
         });
         
         const data = await response.json();
         
-        if (data.success) {
-            convertedFiles.push({
-                filename: data.output_filename,
-                originalName: 'compressed.pdf',
-                meta: `${data.compression_ratio} smaller`
-            });
-            hideProgress();
-            showResults();
-        } else {
-            hideProgress();
-            showError(data.error);
+        if (!response.ok) {
+            throw new Error(data.error || 'Watermark failed');
         }
+        
+        showResult('Watermark added successfully');
+        showDownloadLink(data.output_file);
     } catch (error) {
-        hideProgress();
-        showError('Compression error: ' + error.message);
+        showResult(`Watermark error: ${error.message}`, true);
+    } finally {
+        hideLoading();
     }
 }
 
-async function pdfToImages() {
-    showProgress('Converting PDF to images...');
+// Protect PDF
+async function protectPDF() {
+    const fileInput = document.getElementById('protectFile');
+    const password = document.getElementById('protectPassword').value;
+    
+    if (!password) {
+        showResult('Please enter a password', true);
+        return;
+    }
+    
+    showLoading();
+    const filename = await uploadFile(fileInput);
+    
+    if (!filename) {
+        hideLoading();
+        return;
+    }
     
     try {
-        const response = await fetch(`${API_BASE}/pdf/to-images`, {
+        const response = await fetch('/api/pdf/protect', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                filename: uploadedFiles[0].filename,
-                format: 'png',
-                dpi: 200
-            })
+            body: JSON.stringify({ filename, password })
         });
         
         const data = await response.json();
         
-        if (data.success) {
-            data.output_files.forEach(filename => {
-                convertedFiles.push({ filename, originalName: filename });
-            });
-            hideProgress();
-            showResults();
-        } else {
-            hideProgress();
-            showError(data.error);
+        if (!response.ok) {
+            throw new Error(data.error || 'Protection failed');
         }
+        
+        showResult('PDF protected successfully');
+        showDownloadLink(data.output_file);
     } catch (error) {
-        hideProgress();
-        showError('Conversion error: ' + error.message);
+        showResult(`Protection error: ${error.message}`, true);
+    } finally {
+        hideLoading();
     }
 }
 
-async function extractText() {
-    showProgress('Extracting text...');
+// Unlock PDF
+async function unlockPDF() {
+    const fileInput = document.getElementById('unlockFile');
+    const password = document.getElementById('unlockPassword').value;
+    
+    if (!password) {
+        showResult('Please enter the password', true);
+        return;
+    }
+    
+    showLoading();
+    const filename = await uploadFile(fileInput);
+    
+    if (!filename) {
+        hideLoading();
+        return;
+    }
     
     try {
-        const response = await fetch(`${API_BASE}/pdf/extract-text`, {
+        const response = await fetch('/api/pdf/unlock', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                filename: uploadedFiles[0].filename
-            })
+            body: JSON.stringify({ filename, password })
         });
         
         const data = await response.json();
         
-        if (data.success) {
-            convertedFiles.push({
-                filename: data.output_filename,
-                originalName: 'extracted_text.txt'
-            });
-            hideProgress();
-            showResults();
-        } else {
-            hideProgress();
-            showError(data.error);
+        if (!response.ok) {
+            throw new Error(data.error || 'Unlock failed');
         }
+        
+        showResult('PDF unlocked successfully');
+        showDownloadLink(data.output_file);
     } catch (error) {
-        hideProgress();
-        showError('Extraction error: ' + error.message);
+        showResult(`Unlock error: ${error.message}`, true);
+    } finally {
+        hideLoading();
     }
 }
 
-// Image Operations
-async function compressImage() {
-    showProgress('Compressing image...');
+// Extract Content
+async function extractContent() {
+    const fileInput = document.getElementById('extractFile');
+    const extractType = document.getElementById('extractType').value;
     
-    try {
-        const response = await fetch(`${API_BASE}/image/compress`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                filename: uploadedFiles[0].filename,
-                quality: 85
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            convertedFiles.push({
-                filename: data.output_filename,
-                originalName: 'compressed_image',
-                meta: `${data.compression_ratio} smaller`
-            });
-            hideProgress();
-            showResults();
-        } else {
-            hideProgress();
-            showError(data.error);
-        }
-    } catch (error) {
-        hideProgress();
-        showError('Compression error: ' + error.message);
+    showLoading();
+    const filename = await uploadFile(fileInput);
+    
+    if (!filename) {
+        hideLoading();
+        return;
     }
-}
-
-async function imagesToPDF() {
-    showProgress('Converting images to PDF...');
     
     try {
-        const response = await fetch(`${API_BASE}/images/to-pdf`, {
+        let endpoint;
+        switch(extractType) {
+            case 'text':
+                endpoint = '/api/pdf/extract-text';
+                break;
+            case 'images':
+                endpoint = '/api/pdf/extract-images';
+                break;
+            default:
+                endpoint = '/api/pdf/extract-text';
+        }
+        
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                filenames: uploadedFiles.map(f => f.filename)
-            })
+            body: JSON.stringify({ filename })
         });
         
         const data = await response.json();
         
-        if (data.success) {
-            convertedFiles.push({
-                filename: data.output_filename,
-                originalName: 'images.pdf'
+        if (!response.ok) {
+            throw new Error(data.error || 'Extraction failed');
+        }
+        
+        if (extractType === 'text') {
+            showResult(`Extracted ${data.length} characters of text`);
+            document.getElementById('resultContent').innerHTML += `<pre style="max-height:300px;overflow:auto;background:white;padding:15px;border-radius:8px;">${data.text}</pre>`;
+        } else if (extractType === 'images') {
+            showResult(`Extracted ${data.count} images`);
+            data.output_files.forEach((file, index) => {
+                showDownloadLink(file, `Image ${index + 1}`);
             });
-            hideProgress();
-            showResults();
-        } else {
-            hideProgress();
-            showError(data.error);
         }
     } catch (error) {
-        hideProgress();
-        showError('Conversion error: ' + error.message);
-    }
-}
-
-// Video Operations
-async function extractAudio() {
-    showProgress('Extracting audio...');
-    
-    try {
-        const response = await fetch(`${API_BASE}/video/extract-audio`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                filename: uploadedFiles[0].filename,
-                audio_format: 'mp3'
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            convertedFiles.push({
-                filename: data.output_filename,
-                originalName: 'audio.mp3'
-            });
-            hideProgress();
-            showResults();
-        } else {
-            hideProgress();
-            showError(data.error);
-        }
-    } catch (error) {
-        hideProgress();
-        showError('Extraction error: ' + error.message);
+        showResult(`Extraction error: ${error.message}`, true);
+    } finally {
+        hideLoading();
     }
 }
 
 // OCR
-async function handleOCR() {
-    if (uploadedFiles.length === 0) {
-        showError('Please upload a file first');
+async function performOCR() {
+    const fileInput = document.getElementById('ocrFile');
+    const language = document.getElementById('ocrLanguage').value;
+    
+    showLoading();
+    const filename = await uploadFile(fileInput);
+    
+    if (!filename) {
+        hideLoading();
         return;
     }
     
-    const language = document.getElementById('ocrLanguage').value;
-    const outputFormat = document.getElementById('ocrOutput').value;
-    
-    showProgress('Performing OCR...');
-    
     try {
-        const response = await fetch(`${API_BASE}/ocr`, {
+        const response = await fetch('/api/ocr', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                filename: uploadedFiles[0].filename,
-                language,
-                output_format: outputFormat
+            body: JSON.stringify({ filename, language })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'OCR failed');
+        }
+        
+        showResult(`Extracted ${data.length} characters`);
+        document.getElementById('resultContent').innerHTML += `<pre style="max-height:300px;overflow:auto;background:white;padding:15px;border-radius:8px;">${data.text}</pre>`;
+    } catch (error) {
+        showResult(`OCR error: ${error.message}`, true);
+    } finally {
+        hideLoading();
+    }
+}
+
+// Resize Image
+async function resizeImage() {
+    const fileInput = document.getElementById('imageFile');
+    const width = document.getElementById('resizeWidth').value;
+    const height = document.getElementById('resizeHeight').value;
+    const maintainAspect = document.getElementById('maintainAspect').checked;
+    
+    if (!width && !height) {
+        showResult('Please enter width and/or height', true);
+        return;
+    }
+    
+    showLoading();
+    const filename = await uploadFile(fileInput);
+    
+    if (!filename) {
+        hideLoading();
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/image/resize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                filename, 
+                width: width ? parseInt(width) : null,
+                height: height ? parseInt(height) : null,
+                maintain_aspect: maintainAspect
             })
         });
         
         const data = await response.json();
         
-        if (data.success) {
-            convertedFiles.push({
-                filename: data.output_filename,
-                originalName: outputFormat === 'text' ? 'ocr_text.txt' : 'ocr_searchable.pdf'
-            });
-            hideProgress();
-            showResults();
-        } else {
-            hideProgress();
-            showError(data.error);
+        if (!response.ok) {
+            throw new Error(data.error || 'Resize failed');
         }
+        
+        showResult('Image resized successfully');
+        showDownloadLink(data.output_file);
     } catch (error) {
-        hideProgress();
-        showError('OCR error: ' + error.message);
+        showResult(`Resize error: ${error.message}`, true);
+    } finally {
+        hideLoading();
     }
 }
 
-// Modals
-function showWatermarkModal() {
-    modalTitle.textContent = 'Add Watermark';
-    modalBody.innerHTML = `
-        <div class="form-group">
-            <label>Watermark Text:</label>
-            <input type="text" id="watermarkText" class="form-control" value="CONFIDENTIAL">
-        </div>
-        <div class="form-group">
-            <label>Opacity:</label>
-            <input type="range" id="watermarkOpacity" class="form-control" min="0" max="1" step="0.1" value="0.3">
-        </div>
-    `;
-    modalFooter.innerHTML = `
-        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="applyWatermark()">Apply</button>
-    `;
-    modalOverlay.style.display = 'flex';
-}
-
-async function applyWatermark() {
-    const text = document.getElementById('watermarkText').value;
-    const opacity = parseFloat(document.getElementById('watermarkOpacity').value);
+// Crop Image
+async function cropImage() {
+    const fileInput = document.getElementById('imageFile');
+    const x = document.getElementById('cropX').value;
+    const y = document.getElementById('cropY').value;
+    const width = document.getElementById('cropWidth').value;
+    const height = document.getElementById('cropHeight').value;
     
-    closeModal();
-    showProgress('Adding watermark...');
+    if (!width || !height) {
+        showResult('Please enter crop dimensions', true);
+        return;
+    }
+    
+    showLoading();
+    const filename = await uploadFile(fileInput);
+    
+    if (!filename) {
+        hideLoading();
+        return;
+    }
     
     try {
-        const response = await fetch(`${API_BASE}/pdf/watermark`, {
+        const response = await fetch('/api/image/crop', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                filename: uploadedFiles[0].filename,
-                watermark_text: text,
-                opacity
+            body: JSON.stringify({ 
+                filename,
+                x: parseInt(x),
+                y: parseInt(y),
+                width: parseInt(width),
+                height: parseInt(height)
             })
         });
         
         const data = await response.json();
         
-        if (data.success) {
-            convertedFiles.push({
-                filename: data.output_filename,
-                originalName: 'watermarked.pdf'
-            });
-            hideProgress();
-            showResults();
-        } else {
-            hideProgress();
-            showError(data.error);
+        if (!response.ok) {
+            throw new Error(data.error || 'Crop failed');
         }
-    } catch (error) {
-        hideProgress();
-        showError('Watermark error: ' + error.message);
-    }
-}
-
-function closeModal() {
-    modalOverlay.style.display = 'none';
-}
-
-// Progress
-function showProgress(message) {
-    progressText.textContent = message;
-    progressBar.style.width = '100%';
-    progressSection.style.display = 'block';
-    resultsSection.style.display = 'none';
-}
-
-function hideProgress() {
-    progressSection.style.display = 'none';
-}
-
-// Results
-function showResults() {
-    resultsList.innerHTML = '';
-    
-    convertedFiles.forEach(file => {
-        const resultItem = document.createElement('div');
-        resultItem.className = 'result-item';
-        resultItem.innerHTML = `
-            <div class="result-info">
-                <div class="result-name">${file.originalName}</div>
-                <div class="result-meta">${file.meta || 'Ready to download'}</div>
-            </div>
-            <button class="btn btn-primary" onclick="downloadFile('${file.filename}')">
-                Download
-            </button>
-        `;
-        resultsList.appendChild(resultItem);
-    });
-    
-    resultsSection.style.display = 'block';
-}
-
-function downloadFile(filename) {
-    window.open(`${API_BASE}/download/${filename}`, '_blank');
-}
-
-async function downloadAllAsZip() {
-    try {
-        const response = await fetch(`${API_BASE}/download-multiple`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                filenames: convertedFiles.map(f => f.filename)
-            })
-        });
         
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'converted_files.zip';
-        a.click();
+        showResult('Image cropped successfully');
+        showDownloadLink(data.output_file);
     } catch (error) {
-        showError('Download error: ' + error.message);
+        showResult(`Crop error: ${error.message}`, true);
+    } finally {
+        hideLoading();
     }
 }
 
-function clearResults() {
-    convertedFiles = [];
-    uploadedFiles = [];
-    fileList.innerHTML = '';
-    resultsSection.style.display = 'none';
-}
-
-// Error Handling
-function showError(message) {
-    alert('Error: ' + message);
-}
-
-// Additional modal functions (simplified versions)
-function showSplitPDFModal() { showError('Split PDF modal not fully implemented in this demo'); }
-function showRotateModal() { showError('Rotate modal not fully implemented in this demo'); }
-function showProtectModal() { showError('Protect modal not fully implemented in this demo'); }
-function showUnlockModal() { showError('Unlock modal not fully implemented in this demo'); }
-function showPageNumbersModal() { showError('Page numbers modal not fully implemented in this demo'); }
-function showResizeModal() { showError('Resize modal not fully implemented in this demo'); }
+// Show/hide split range input
+document.getElementById('splitType')?.addEventListener('change', function() {
+    const rangeInput = document.getElementById('splitRange');
+    rangeInput.style.display = this.value === 'range' ? 'block' : 'none';
+});
