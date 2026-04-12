@@ -71,14 +71,19 @@ def allowed_file(filename):
 @app.route("/api/upload", methods=["POST"])
 def upload_file():
     try:
+        logger.info("Upload request received")
+        
         if 'file' not in request.files:
+            logger.warning("No file in request")
             return jsonify({"error": "No file provided"}), 400
         
         file = request.files['file']
         if file.filename == '':
+            logger.warning("Empty filename")
             return jsonify({"error": "Empty filename"}), 400
         
         if not allowed_file(file.filename):
+            logger.warning(f"File type not allowed: {file.filename}")
             return jsonify({"error": "File type not allowed"}), 400
         
         # Generate unique filename
@@ -86,10 +91,13 @@ def upload_file():
         unique_filename = f"{uuid.uuid4()}_{filename}"
         filepath = os.path.join(app.config["UPLOAD_FOLDER"], unique_filename)
         
+        logger.info(f"Saving file: {unique_filename}")
         file.save(filepath)
         
         # Detect file type
         file_type = detect_file_type(filepath)
+        
+        logger.info(f"File uploaded successfully: {unique_filename} (type: {file_type})")
         
         return jsonify({
             "success": True,
@@ -100,7 +108,7 @@ def upload_file():
         })
     
     except Exception as e:
-        logger.error(f"Upload error: {str(e)}")
+        logger.error(f"Upload error: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 # =================== CONVERT ===================
@@ -108,10 +116,32 @@ def upload_file():
 def convert_file():
     try:
         data = request.json
-        input_file = os.path.join(app.config["UPLOAD_FOLDER"], data["filename"])
-        target_format = data["target_format"]
         
+        # Validate input
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        if "filename" not in data:
+            return jsonify({"error": "No filename provided"}), 400
+        
+        if "target_format" not in data or not data["target_format"]:
+            return jsonify({"error": "No target format specified"}), 400
+        
+        filename = data["filename"]
+        target_format = data["target_format"].lower()
+        
+        input_file = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        
+        # Check if file exists
+        if not os.path.exists(input_file):
+            return jsonify({"error": f"File not found: {filename}"}), 404
+        
+        logger.info(f"Converting {filename} to {target_format}")
+        
+        # Perform conversion
         output_file = converter.convert(input_file, target_format, app.config["OUTPUT_FOLDER"])
+        
+        logger.info(f"Conversion successful: {os.path.basename(output_file)}")
         
         return jsonify({
             "success": True,
@@ -119,9 +149,15 @@ def convert_file():
             "message": f"Converted to {target_format.upper()}"
         })
     
+    except ValueError as e:
+        # Conversion not supported
+        logger.warning(f"Conversion error: {str(e)}")
+        return jsonify({"error": str(e)}), 400
+    
     except Exception as e:
-        logger.error(f"Convert error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        # Other errors
+        logger.error(f"Convert error: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Conversion failed: {str(e)}"}), 500
 
 # =================== PDF OPERATIONS ===================
 @app.route("/api/pdf/merge", methods=["POST"])
