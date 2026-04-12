@@ -5,11 +5,24 @@ Handles all image-related operations: convert, resize, compress, etc.
 
 import os
 import uuid
+
+# Pillow (SAFE — always works)
 from PIL import Image
-import img2pdf
-from wand.image import Image as WandImage
 
+# Optional: img2pdf (may not work on Render)
+try:
+    import img2pdf
+    IMG2PDF_AVAILABLE = True
+except:
+    IMG2PDF_AVAILABLE = False
 
+# Optional: Wand (NOT supported on Render)
+try:
+    from wand.image import Image as WandImage
+    WAND_AVAILABLE = True
+except:
+    WAND_AVAILABLE = False
+    
 class ImageEngine:
     """Engine for image operations"""
     
