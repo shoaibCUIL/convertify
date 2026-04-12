@@ -59,6 +59,11 @@ signer = DocumentSigner()
 def index():
     return render_template("index.html")
 
+@app.route("/health")
+def health():
+    """Health check endpoint for Render"""
+    return jsonify({"status": "healthy", "message": "File Converter API is running"}), 200
+
 # =================== UPLOAD ===================
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config["ALLOWED_EXTENSIONS"]
@@ -530,4 +535,6 @@ def internal_server_error(error):
     return jsonify({"error": "Internal server error"}), 500
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    # Get port from environment variable (Render provides PORT)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, host="0.0.0.0", port=port)

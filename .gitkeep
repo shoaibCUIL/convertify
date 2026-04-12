@@ -1,0 +1,4 @@
+# In Git Bash or terminal:
+cd D:\Pythonclass
+touch uploads/.gitkeep
+touch outputs/.gitkeep
