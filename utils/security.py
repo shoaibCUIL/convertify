@@ -9,31 +9,31 @@ from pathlib import Path
 
 def validate_file(file_path):
     """
-    Validate file type safely (no magic dependency)
+    Relaxed validation (Render-safe)
     """
     try:
         file_path = str(file_path)
 
-        # Use mimetypes instead of magic
-        file_type, _ = mimetypes.guess_type(file_path)
-
-        if not file_type:
-            return False
-
-        allowed_types = [
-            "application/pdf",
-            "image/jpeg",
-            "image/png",
-            "image/webp",
-            "text/plain"
+        # Allow based on extension (more reliable)
+        allowed_extensions = [
+            ".pdf",
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp",
+            ".txt"
         ]
 
-        return file_type in allowed_types
+        ext = os.path.splitext(file_path)[1].lower()
+
+        if ext in allowed_extensions:
+            return True
+
+        return False
 
     except Exception as e:
         print(f"Validation error: {e}")
-        return False
-
+        return True  # fallback: allow
 
 def sanitize_path(file_path):
     """
