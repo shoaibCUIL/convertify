@@ -1,29 +1,24 @@
-import sys
 import os
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
+import uuid
+import logging
 from flask import Flask, request, jsonify, send_file, render_template
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
-import uuid
-import logging
-from datetime import datetime
 
-from utils.file_detector import detect_file_type, get_file_info
 from utils.converter import UniversalConverter
+from utils.file_detector import detect_file_type
 
 # ================= CONFIG =================
 app = Flask(__name__)
 CORS(app)
 
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['OUTPUT_FOLDER'] = 'outputs'
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB
+app.config["UPLOAD_FOLDER"] = "uploads"
+app.config["OUTPUT_FOLDER"] = "outputs"
+app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100MB
 
 # Create folders
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
+os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+os.makedirs(app.config["OUTPUT_FOLDER"], exist_ok=True)
 
 # Logging
 logging.basicConfig(level=logging.INFO)
@@ -34,59 +29,51 @@ converter = UniversalConverter()
 
 # ================= ROUTES =================
 
-@app.route('/')
+@app.route("/")
 def index():
-    return render_template('index.html')
-
-
-@app.route('/api/health')
-def health():
-    return jsonify({
-        "status": "running",
-        "time": datetime.utcnow().isoformat()
-    })
+    return render_template("index.html")
 
 
 # ================= UPLOAD =================
-@app.route('/api/upload', methods=['POST'])
+@app.route("/api/upload", methods=["POST"])
 def upload():
     try:
         logger.info("Upload called")
 
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file'}), 400
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
 
-        file = request.files['file']
+        file = request.files["file"]
 
-        if file.filename == '':
-            return jsonify({'error': 'Empty filename'}), 400
+        if file.filename == "":
+            return jsonify({"error": "Empty filename"}), 400
 
-        # 🔥 IMPORTANT: NO VALIDATION (fixes your issue)
+        # 🔥 NO STRICT VALIDATION (fixes your issue)
         filename = secure_filename(file.filename)
         file_id = str(uuid.uuid4())
         ext = os.path.splitext(filename)[1]
 
         new_filename = file_id + ext
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
+        filepath = os.path.join(app.config["UPLOAD_FOLDER"], new_filename)
 
         file.save(filepath)
 
-        # Detect type
-        info = detect_file_type(filepath)
+        # Detect file type
+        file_type = detect_file_type(filepath)
 
         return jsonify({
             "success": True,
             "filename": new_filename,
-            "file_type": info.get("type", "unknown")
+            "file_type": file_type.get("type")
         })
 
     except Exception as e:
         logger.error(str(e))
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 # ================= CONVERT =================
-@app.route('/api/convert', methods=['POST'])
+@app.route("/api/convert", methods=["POST"])
 def convert():
     try:
         data = request.get_json()
@@ -95,9 +82,9 @@ def convert():
         target_format = data.get("target_format")
 
         if not filename or not target_format:
-            return jsonify({"error": "Missing data"}), 400
+            return jsonify({"error": "Missing parameters"}), 400
 
-        input_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        input_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
 
         if not os.path.exists(input_path):
             return jsonify({"error": "File not found"}), 404
@@ -105,7 +92,7 @@ def convert():
         result = converter.convert(
             input_path,
             target_format,
-            {"output_folder": app.config['OUTPUT_FOLDER']}
+            {"output_folder": app.config["OUTPUT_FOLDER"]}
         )
 
         if result["success"]:
@@ -125,10 +112,10 @@ def convert():
 
 
 # ================= DOWNLOAD =================
-@app.route('/api/download/<filename>')
+@app.route("/api/download/<filename>")
 def download(filename):
     try:
-        path = os.path.join(app.config['OUTPUT_FOLDER'], filename)
+        path = os.path.join(app.config["OUTPUT_FOLDER"], filename)
 
         if not os.path.exists(path):
             return jsonify({"error": "File not found"}), 404
@@ -137,6 +124,12 @@ def download(filename):
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ================= HEALTH =================
+@app.route("/api/health")
+def health():
+    return jsonify({"status": "running"})
 
 
 # ================= ERRORS =================
