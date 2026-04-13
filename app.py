@@ -4,9 +4,13 @@ import uuid
 from flask import Flask, request, render_template, send_file, jsonify
 from werkzeug.utils import secure_filename
 from PyPDF2 import PdfMerger, PdfReader, PdfWriter
+from flask_cors import CORS
 
 # ================= INIT =================
 app = Flask(__name__)
+
+# ✅ ENABLE CORS (IMPORTANT FOR WORDPRESS)
+CORS(app)
 
 UPLOAD_FOLDER = "uploads"
 OUTPUT_FOLDER = "outputs"
@@ -111,7 +115,7 @@ def docx_to_pdf():
     }), 501
 
 
-# ================= HEALTH =================
+# ================= HEALTH CHECK =================
 @app.route("/health")
 def health():
     return {"status": "running"}
