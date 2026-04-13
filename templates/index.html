@@ -1,186 +1,209 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Convertify - PDF Tools</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
 
 <style>
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-body {
+.convertify-container {
     font-family: 'Poppins', sans-serif;
-    background: linear-gradient(135deg, #eef2ff, #f8fafc);
-    color: #111827;
-}
-
-/* NAVBAR */
-.navbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 20px 40px;
-    background: white;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-}
-
-.logo {
-    font-size: 22px;
-    font-weight: 700;
-    color: #2563eb;
-}
-
-/* HERO */
-.hero {
-    text-align: center;
-    padding: 60px 20px 30px;
-}
-
-.hero h1 {
-    font-size: 36px;
-    font-weight: 700;
-}
-
-.hero p {
-    margin-top: 10px;
-    color: #6b7280;
-}
-
-/* GRID */
-.container {
     max-width: 1100px;
-    margin: 30px auto;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 25px;
+    margin: auto;
     padding: 20px;
 }
 
-/* CARD */
-.card {
+.convertify-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.convertify-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px;
+}
+
+.convertify-card {
     background: white;
-    padding: 25px;
-    border-radius: 16px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.08);
-    transition: 0.3s;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.08);
 }
 
-.card:hover {
-    transform: translateY(-6px);
-}
-
-.card h2 {
-    margin-bottom: 15px;
-    font-size: 20px;
-}
-
-/* INPUT */
-input {
+.convertify-card input {
     width: 100%;
-    padding: 10px;
     margin-top: 10px;
-    border-radius: 8px;
-    border: 1px solid #e5e7eb;
+    padding: 10px;
 }
 
-/* BUTTON */
-button {
+.convertify-card button {
     width: 100%;
     margin-top: 15px;
     padding: 12px;
-    border: none;
-    border-radius: 8px;
-    background: linear-gradient(135deg, #2563eb, #4f46e5);
+    background: #2563eb;
     color: white;
-    font-weight: 500;
+    border: none;
+    border-radius: 6px;
     cursor: pointer;
 }
 
-button:hover {
-    opacity: 0.9;
-}
-
-.disabled {
-    background: #9ca3af !important;
-    cursor: not-allowed;
-}
-
-.note {
+.preview {
     margin-top: 10px;
-    font-size: 12px;
-    color: #6b7280;
+    font-size: 14px;
+    color: #374151;
 }
 
-/* FOOTER */
-.footer {
+.loader {
+    display: none;
+    margin-top: 10px;
     text-align: center;
-    padding: 20px;
-    font-size: 13px;
-    color: #9ca3af;
+    color: #2563eb;
 }
 </style>
-</head>
 
-<body>
+<div class="convertify-container">
 
-<!-- NAVBAR -->
-<div class="navbar">
-    <div class="logo">Convertify</div>
-</div>
-
-<!-- HERO -->
-<div class="hero">
-    <h1>All-in-One PDF Toolkit</h1>
-    <p>Merge, split and convert your documents easily</p>
-</div>
-
-<!-- TOOLS -->
-<div class="container">
-
-    <!-- MERGE -->
-    <div class="card">
-        <h2>📎 Merge PDFs</h2>
-        <form action="/merge" method="post" enctype="multipart/form-data">
-            <input type="file" name="files" multiple required>
-            <button type="submit">Merge Files</button>
-        </form>
+    <div class="convertify-header">
+        <h1>Convertify 🚀</h1>
+        <p>Merge & Split PDFs instantly</p>
     </div>
 
-    <!-- SPLIT -->
-    <div class="card">
-        <h2>✂️ Split PDF</h2>
-        <form action="/split" method="post" enctype="multipart/form-data">
-            <input type="file" name="file" required>
+    <div class="convertify-grid">
 
-            <input type="number" name="start_page" placeholder="Start Page (e.g. 1)" required>
-            <input type="number" name="end_page" placeholder="End Page (e.g. 5)" required>
+        <!-- MERGE -->
+        <div class="convertify-card">
+            <h2>Merge PDFs</h2>
+            <input type="file" id="mergeFiles" multiple onchange="previewMerge()">
+            
+            <div class="preview" id="mergePreview"></div>
 
-            <button type="submit">Extract Pages</button>
-        </form>
+            <button onclick="mergePDF()">Merge</button>
+            <div class="loader" id="mergeLoader">Processing...</div>
+        </div>
 
-        <div class="note">Example: 2–5 extracts pages 2 to 5</div>
+        <!-- SPLIT -->
+        <div class="convertify-card">
+            <h2>Split PDF</h2>
+            <input type="file" id="splitFile" onchange="previewSplit()">
+            
+            <div class="preview" id="splitPreview"></div>
+
+            <input type="number" id="startPage" placeholder="Start Page">
+            <input type="number" id="endPage" placeholder="End Page">
+
+            <button onclick="splitPDF()">Split</button>
+            <div class="loader" id="splitLoader">Processing...</div>
+        </div>
+
     </div>
-
-    <!-- DOCX -->
-    <div class="card">
-        <h2>📝 DOCX → PDF</h2>
-        <input type="file" disabled>
-        <button class="disabled">Coming Soon</button>
-        <div class="note">Feature will be available soon</div>
-    </div>
-
 </div>
 
-<!-- FOOTER -->
-<div class="footer">
-    © 2026 Convertify
-</div>
+<script>
+const BASE_URL = "https://convertify-ci3g.onrender.com";
 
-</body>
-</html>
+// ================= PREVIEW MERGE =================
+function previewMerge() {
+    const files = document.getElementById("mergeFiles").files;
+    let preview = document.getElementById("mergePreview");
+
+    if (files.length === 0) {
+        preview.innerHTML = "";
+        return;
+    }
+
+    let names = [];
+    for (let file of files) {
+        names.push(file.name);
+    }
+
+    preview.innerHTML = `<strong>${files.length} file(s):</strong><br>` + names.join("<br>");
+}
+
+// ================= PREVIEW SPLIT =================
+function previewSplit() {
+    const file = document.getElementById("splitFile").files[0];
+    let preview = document.getElementById("splitPreview");
+
+    if (!file) {
+        preview.innerHTML = "";
+        return;
+    }
+
+    preview.innerHTML = `<strong>Selected:</strong> ${file.name}`;
+}
+
+// ================= LOADER =================
+function showLoader(id, show) {
+    document.getElementById(id).style.display = show ? "block" : "none";
+}
+
+// ================= MERGE =================
+async function mergePDF() {
+    const files = document.getElementById("mergeFiles").files;
+
+    if (files.length === 0) return alert("Select files");
+
+    showLoader("mergeLoader", true);
+
+    let formData = new FormData();
+    for (let file of files) {
+        formData.append("files", file);
+    }
+
+    try {
+        let response = await fetch(BASE_URL + "/merge", {
+            method: "POST",
+            body: formData
+        });
+
+        if (!response.ok) throw new Error(await response.text());
+
+        let blob = await response.blob();
+        let url = URL.createObjectURL(blob);
+
+        let a = document.createElement("a");
+        a.href = url;
+        a.download = "merged.pdf";
+        a.click();
+
+    } catch (e) {
+        alert("Error: " + e.message);
+    }
+
+    showLoader("mergeLoader", false);
+}
+
+// ================= SPLIT =================
+async function splitPDF() {
+    const file = document.getElementById("splitFile").files[0];
+    const start = document.getElementById("startPage").value;
+    const end = document.getElementById("endPage").value;
+
+    if (!file || !start || !end) return alert("Fill all fields");
+
+    showLoader("splitLoader", true);
+
+    let formData = new FormData();
+    formData.append("file", file);
+    formData.append("start_page", start);
+    formData.append("end_page", end);
+
+    try {
+        let response = await fetch(BASE_URL + "/split", {
+            method: "POST",
+            body: formData
+        });
+
+        if (!response.ok) throw new Error(await response.text());
+
+        let blob = await response.blob();
+        let url = URL.createObjectURL(blob);
+
+        let a = document.createElement("a");
+        a.href = url;
+        a.download = "split.pdf";
+        a.click();
+
+    } catch (e) {
+        alert("Error: " + e.message);
+    }
+
+    showLoader("splitLoader", false);
+}
+</script>
