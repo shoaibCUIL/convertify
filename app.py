@@ -1,6 +1,5 @@
 import os
 import uuid
-import zipfile
 
 from flask import Flask, request, render_template, send_file, jsonify
 from werkzeug.utils import secure_filename
@@ -57,7 +56,7 @@ def merge_pdf():
         return jsonify({"error": str(e)}), 500
 
 
-# ================= PDF SPLIT (FIXED + ZIP) =================
+# ================= PDF SPLIT (RANGE BASED) =================
 @app.route("/split", methods=["POST"])
 def split_pdf():
     try:
@@ -65,54 +64,54 @@ def split_pdf():
             return "No file uploaded", 400
 
         file = request.files["file"]
+        start_page = request.form.get("start_page")
+        end_page = request.form.get("end_page")
 
         if file.filename == "":
             return "No file selected", 400
+
+        if not start_page or not end_page:
+            return "Please provide page range", 400
+
+        start_page = int(start_page)
+        end_page = int(end_page)
 
         filename = secure_filename(file.filename)
         pdf_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
         file.save(pdf_path)
 
         reader = PdfReader(pdf_path)
+        total_pages = len(reader.pages)
 
-        if len(reader.pages) == 0:
-            return "Invalid or empty PDF", 400
+        if start_page < 1 or end_page > total_pages or start_page > end_page:
+            return f"Invalid range. PDF has {total_pages} pages.", 400
 
-        unique_id = str(uuid.uuid4())
-        zip_path = os.path.join(app.config["OUTPUT_FOLDER"], f"{unique_id}.zip")
+        writer = PdfWriter()
 
-        with zipfile.ZipFile(zip_path, "w") as zipf:
-            for i, page in enumerate(reader.pages):
-                writer = PdfWriter()
-                writer.add_page(page)
+        for i in range(start_page - 1, end_page):
+            writer.add_page(reader.pages[i])
 
-                temp_pdf = os.path.join(
-                    app.config["OUTPUT_FOLDER"], f"{unique_id}_page_{i+1}.pdf"
-                )
+        output_filename = f"split_{uuid.uuid4()}.pdf"
+        output_path = os.path.join(app.config["OUTPUT_FOLDER"], output_filename)
 
-                with open(temp_pdf, "wb") as f:
-                    writer.write(f)
+        with open(output_path, "wb") as f:
+            writer.write(f)
 
-                zipf.write(temp_pdf, f"page_{i+1}.pdf")
-
-                # cleanup temp file
-                os.remove(temp_pdf)
-
-        return send_file(zip_path, as_attachment=True)
+        return send_file(output_path, as_attachment=True)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
-# ================= DOCX → PDF (SAFE HANDLING) =================
+# ================= DOCX → PDF (DISABLED SAFE) =================
 @app.route("/docx-to-pdf", methods=["POST"])
 def docx_to_pdf():
     return jsonify({
-        "message": "DOCX to PDF is currently disabled on this server. Requires LibreOffice/Docker setup."
+        "message": "DOCX to PDF is currently disabled on this server (requires Docker + LibreOffice)."
     }), 501
 
 
-# ================= HEALTH CHECK =================
+# ================= HEALTH =================
 @app.route("/health")
 def health():
     return {"status": "running"}
