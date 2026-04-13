@@ -1,576 +1,154 @@
 import os
 import uuid
-import logging
-from flask import Flask, request, jsonify, send_file, render_template
-from flask_cors import CORS
+import zipfile
+import subprocess
+
+from flask import Flask, request, render_template, send_file, jsonify
 from werkzeug.utils import secure_filename
+from PyPDF2 import PdfMerger, PdfReader, PdfWriter
 
-from utils.converter import UniversalConverter
-from utils.file_detector import detect_file_type
-from utils.pdf_editor import PDFEditor
-from utils.image_editor import ImageEditor
-from utils.merger import FileMerger
-from utils.splitter import FileSplitter
-from utils.compressor import FileCompressor
-from utils.extractor import ContentExtractor
-from utils.ocr_processor import OCRProcessor
-from utils.watermark import WatermarkProcessor
-from utils.protector import FileProtector
-from utils.signer import DocumentSigner
-
-# =================== CONFIG ===================
+# ================= INIT =================
 app = Flask(__name__)
-CORS(app)
 
-app.config["UPLOAD_FOLDER"] = "uploads"
-app.config["OUTPUT_FOLDER"] = "outputs"
-app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100MB
-app.config["ALLOWED_EXTENSIONS"] = {
-    'pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt',
-    'jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp',
-    'txt', 'csv', 'json', 'xml', 'html', 'md',
-    'zip', 'rar', 'epub', 'mobi'
-}
+UPLOAD_FOLDER = "uploads"
+OUTPUT_FOLDER = "outputs"
 
-# Create folders
-os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-os.makedirs(app.config["OUTPUT_FOLDER"], exist_ok=True)
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-# Logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+app.config["OUTPUT_FOLDER"] = OUTPUT_FOLDER
 
-# Initialize processors
-converter = UniversalConverter()
-pdf_editor = PDFEditor()
-image_editor = ImageEditor()
-merger = FileMerger()
-splitter = FileSplitter()
-compressor = FileCompressor()
-extractor = ContentExtractor()
-ocr_processor = OCRProcessor()
-watermark_processor = WatermarkProcessor()
-protector = FileProtector()
-signer = DocumentSigner()
 
-# =================== ROUTES ===================
-
+# ================= HOME =================
 @app.route("/")
 def index():
     return render_template("index.html")
 
-@app.route("/health")
-def health():
-    """Health check endpoint for Render"""
-    return jsonify({"status": "healthy", "message": "File Converter API is running"}), 200
 
-# =================== UPLOAD ===================
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config["ALLOWED_EXTENSIONS"]
-
-@app.route("/api/upload", methods=["POST"])
-def upload_file():
+# ================= PDF MERGE =================
+@app.route("/merge", methods=["POST"])
+def merge_pdf():
     try:
-        logger.info("Upload request received")
-        
-        if 'file' not in request.files:
-            logger.warning("No file in request")
-            return jsonify({"error": "No file provided"}), 400
-        
-        file = request.files['file']
-        if file.filename == '':
-            logger.warning("Empty filename")
-            return jsonify({"error": "Empty filename"}), 400
-        
-        if not allowed_file(file.filename):
-            logger.warning(f"File type not allowed: {file.filename}")
-            return jsonify({"error": "File type not allowed"}), 400
-        
-        # Generate unique filename
-        filename = secure_filename(file.filename)
-        unique_filename = f"{uuid.uuid4()}_{filename}"
-        filepath = os.path.join(app.config["UPLOAD_FOLDER"], unique_filename)
-        
-        logger.info(f"Saving file: {unique_filename}")
-        file.save(filepath)
-        
-        # Detect file type
-        file_type = detect_file_type(filepath)
-        
-        logger.info(f"File uploaded successfully: {unique_filename} (type: {file_type})")
-        
-        return jsonify({
-            "success": True,
-            "filename": unique_filename,
-            "original_name": filename,
-            "file_type": file_type,
-            "size": os.path.getsize(filepath)
-        })
-    
+        files = request.files.getlist("files")
+
+        if not files or files[0].filename == "":
+            return "No files uploaded", 400
+
+        merger = PdfMerger()
+
+        for file in files:
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+            file.save(filepath)
+            merger.append(filepath)
+
+        output_filename = f"{uuid.uuid4()}.pdf"
+        output_path = os.path.join(app.config["OUTPUT_FOLDER"], output_filename)
+
+        merger.write(output_path)
+        merger.close()
+
+        return send_file(output_path, as_attachment=True)
+
     except Exception as e:
-        logger.error(f"Upload error: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
-# =================== CONVERT ===================
-@app.route("/api/convert", methods=["POST"])
-def convert_file():
-    try:
-        data = request.json
-        
-        # Validate input
-        if not data:
-            return jsonify({"error": "No data provided"}), 400
-        
-        if "filename" not in data:
-            return jsonify({"error": "No filename provided"}), 400
-        
-        if "target_format" not in data or not data["target_format"]:
-            return jsonify({"error": "No target format specified"}), 400
-        
-        filename = data["filename"]
-        target_format = data["target_format"].lower()
-        
-        input_file = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-        
-        # Check if file exists
-        if not os.path.exists(input_file):
-            return jsonify({"error": f"File not found: {filename}"}), 404
-        
-        logger.info(f"Converting {filename} to {target_format}")
-        
-        # Perform conversion
-        output_file = converter.convert(input_file, target_format, app.config["OUTPUT_FOLDER"])
-        
-        logger.info(f"Conversion successful: {os.path.basename(output_file)}")
-        
-        return jsonify({
-            "success": True,
-            "output_file": os.path.basename(output_file),
-            "message": f"Converted to {target_format.upper()}"
-        })
-    
-    except ValueError as e:
-        # Conversion not supported
-        logger.warning(f"Conversion error: {str(e)}")
-        return jsonify({"error": str(e)}), 400
-    
-    except Exception as e:
-        # Other errors
-        logger.error(f"Convert error: {str(e)}", exc_info=True)
-        return jsonify({"error": f"Conversion failed: {str(e)}"}), 500
 
-# =================== PDF OPERATIONS ===================
-@app.route("/api/pdf/merge", methods=["POST"])
-def merge_pdfs():
-    try:
-        data = request.json
-        input_files = [os.path.join(app.config["UPLOAD_FOLDER"], f) for f in data["files"]]
-        
-        output_file = merger.merge_pdfs(input_files, app.config["OUTPUT_FOLDER"])
-        
-        return jsonify({
-            "success": True,
-            "output_file": os.path.basename(output_file)
-        })
-    
-    except Exception as e:
-        logger.error(f"Merge error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/pdf/split", methods=["POST"])
+# ================= PDF SPLIT (ZIP DOWNLOAD) =================
+@app.route("/split", methods=["POST"])
 def split_pdf():
     try:
-        data = request.json
-        input_file = os.path.join(app.config["UPLOAD_FOLDER"], data["filename"])
-        
-        output_files = splitter.split_pdf(
-            input_file,
-            app.config["OUTPUT_FOLDER"],
-            data.get("ranges"),  # e.g., "1-3,5,7-10"
-            data.get("split_type", "all")  # "all", "range", "every_n"
-        )
-        
-        return jsonify({
-            "success": True,
-            "output_files": [os.path.basename(f) for f in output_files]
-        })
-    
+        file = request.files["file"]
+
+        if file.filename == "":
+            return "No file selected", 400
+
+        filename = secure_filename(file.filename)
+        pdf_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        file.save(pdf_path)
+
+        reader = PdfReader(pdf_path)
+
+        unique_id = str(uuid.uuid4())
+        split_folder = os.path.join(app.config["OUTPUT_FOLDER"], unique_id)
+        os.makedirs(split_folder, exist_ok=True)
+
+        output_files = []
+
+        for i, page in enumerate(reader.pages):
+            writer = PdfWriter()
+            writer.add_page(page)
+
+            output_path = os.path.join(split_folder, f"page_{i+1}.pdf")
+
+            with open(output_path, "wb") as f:
+                writer.write(f)
+
+            output_files.append(output_path)
+
+        # Create ZIP
+        zip_path = os.path.join(app.config["OUTPUT_FOLDER"], f"{unique_id}.zip")
+
+        with zipfile.ZipFile(zip_path, "w") as zipf:
+            for file in output_files:
+                zipf.write(file, os.path.basename(file))
+
+        return send_file(zip_path, as_attachment=True)
+
     except Exception as e:
-        logger.error(f"Split error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/pdf/rotate", methods=["POST"])
-def rotate_pdf():
+
+# ================= DOCX → PDF (LIBREOFFICE) =================
+@app.route("/docx-to-pdf", methods=["POST"])
+def docx_to_pdf():
     try:
-        data = request.json
-        input_file = os.path.join(app.config["UPLOAD_FOLDER"], data["filename"])
-        
-        output_file = pdf_editor.rotate_pages(
-            input_file,
-            app.config["OUTPUT_FOLDER"],
-            data.get("angle", 90),
-            data.get("pages", "all")
-        )
-        
-        return jsonify({
-            "success": True,
-            "output_file": os.path.basename(output_file)
-        })
-    
+        file = request.files["file"]
+
+        if file.filename == "":
+            return "No file uploaded", 400
+
+        filename = secure_filename(file.filename)
+        input_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        file.save(input_path)
+
+        # Output folder
+        output_dir = app.config["OUTPUT_FOLDER"]
+
+        # Convert using LibreOffice
+        subprocess.run([
+            "libreoffice",
+            "--headless",
+            "--convert-to",
+            "pdf",
+            input_path,
+            "--outdir",
+            output_dir
+        ], check=True)
+
+        # Find generated PDF
+        base_name = os.path.splitext(filename)[0]
+        output_path = os.path.join(output_dir, base_name + ".pdf")
+
+        if not os.path.exists(output_path):
+            return "Conversion failed", 500
+
+        return send_file(output_path, as_attachment=True)
+
+    except subprocess.CalledProcessError:
+        return jsonify({"error": "LibreOffice conversion failed"}), 500
+
     except Exception as e:
-        logger.error(f"Rotate error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/pdf/compress", methods=["POST"])
-def compress_pdf():
-    try:
-        data = request.json
-        input_file = os.path.join(app.config["UPLOAD_FOLDER"], data["filename"])
-        
-        output_file = compressor.compress_pdf(
-            input_file,
-            app.config["OUTPUT_FOLDER"],
-            data.get("quality", "medium")
-        )
-        
-        original_size = os.path.getsize(input_file)
-        compressed_size = os.path.getsize(output_file)
-        reduction = ((original_size - compressed_size) / original_size) * 100
-        
-        return jsonify({
-            "success": True,
-            "output_file": os.path.basename(output_file),
-            "original_size": original_size,
-            "compressed_size": compressed_size,
-            "reduction_percent": round(reduction, 2)
-        })
-    
-    except Exception as e:
-        logger.error(f"Compress error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
 
-@app.route("/api/pdf/watermark", methods=["POST"])
-def add_watermark():
-    try:
-        data = request.json
-        input_file = os.path.join(app.config["UPLOAD_FOLDER"], data["filename"])
-        
-        output_file = watermark_processor.add_watermark(
-            input_file,
-            app.config["OUTPUT_FOLDER"],
-            data.get("text", "CONFIDENTIAL"),
-            data.get("opacity", 0.3),
-            data.get("position", "center"),
-            data.get("angle", 45)
-        )
-        
-        return jsonify({
-            "success": True,
-            "output_file": os.path.basename(output_file)
-        })
-    
-    except Exception as e:
-        logger.error(f"Watermark error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+# ================= HEALTH CHECK =================
+@app.route("/health")
+def health():
+    return {"status": "running"}
 
-@app.route("/api/pdf/protect", methods=["POST"])
-def protect_pdf():
-    try:
-        data = request.json
-        input_file = os.path.join(app.config["UPLOAD_FOLDER"], data["filename"])
-        
-        output_file = protector.protect_pdf(
-            input_file,
-            app.config["OUTPUT_FOLDER"],
-            data["password"],
-            data.get("permissions", {})
-        )
-        
-        return jsonify({
-            "success": True,
-            "output_file": os.path.basename(output_file)
-        })
-    
-    except Exception as e:
-        logger.error(f"Protect error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
 
-@app.route("/api/pdf/unlock", methods=["POST"])
-def unlock_pdf():
-    try:
-        data = request.json
-        input_file = os.path.join(app.config["UPLOAD_FOLDER"], data["filename"])
-        
-        output_file = protector.unlock_pdf(
-            input_file,
-            app.config["OUTPUT_FOLDER"],
-            data["password"]
-        )
-        
-        return jsonify({
-            "success": True,
-            "output_file": os.path.basename(output_file)
-        })
-    
-    except Exception as e:
-        logger.error(f"Unlock error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/pdf/extract-images", methods=["POST"])
-def extract_images():
-    try:
-        data = request.json
-        input_file = os.path.join(app.config["UPLOAD_FOLDER"], data["filename"])
-        
-        output_files = extractor.extract_images_from_pdf(
-            input_file,
-            app.config["OUTPUT_FOLDER"]
-        )
-        
-        return jsonify({
-            "success": True,
-            "output_files": [os.path.basename(f) for f in output_files],
-            "count": len(output_files)
-        })
-    
-    except Exception as e:
-        logger.error(f"Extract images error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/pdf/extract-text", methods=["POST"])
-def extract_text():
-    try:
-        data = request.json
-        input_file = os.path.join(app.config["UPLOAD_FOLDER"], data["filename"])
-        
-        text = extractor.extract_text_from_pdf(input_file)
-        
-        return jsonify({
-            "success": True,
-            "text": text,
-            "length": len(text)
-        })
-    
-    except Exception as e:
-        logger.error(f"Extract text error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-# =================== IMAGE OPERATIONS ===================
-@app.route("/api/image/edit", methods=["POST"])
-def edit_image():
-    try:
-        data = request.json
-        input_file = os.path.join(app.config["UPLOAD_FOLDER"], data["filename"])
-        
-        output_file = image_editor.edit_image(
-            input_file,
-            app.config["OUTPUT_FOLDER"],
-            data.get("operations", {})
-        )
-        
-        return jsonify({
-            "success": True,
-            "output_file": os.path.basename(output_file)
-        })
-    
-    except Exception as e:
-        logger.error(f"Image edit error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/image/compress", methods=["POST"])
-def compress_image():
-    try:
-        data = request.json
-        input_file = os.path.join(app.config["UPLOAD_FOLDER"], data["filename"])
-        
-        output_file = compressor.compress_image(
-            input_file,
-            app.config["OUTPUT_FOLDER"],
-            data.get("quality", 85)
-        )
-        
-        original_size = os.path.getsize(input_file)
-        compressed_size = os.path.getsize(output_file)
-        reduction = ((original_size - compressed_size) / original_size) * 100
-        
-        return jsonify({
-            "success": True,
-            "output_file": os.path.basename(output_file),
-            "reduction_percent": round(reduction, 2)
-        })
-    
-    except Exception as e:
-        logger.error(f"Image compress error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/image/resize", methods=["POST"])
-def resize_image():
-    try:
-        data = request.json
-        input_file = os.path.join(app.config["UPLOAD_FOLDER"], data["filename"])
-        
-        output_file = image_editor.resize_image(
-            input_file,
-            app.config["OUTPUT_FOLDER"],
-            data.get("width"),
-            data.get("height"),
-            data.get("maintain_aspect", True)
-        )
-        
-        return jsonify({
-            "success": True,
-            "output_file": os.path.basename(output_file)
-        })
-    
-    except Exception as e:
-        logger.error(f"Resize error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/image/crop", methods=["POST"])
-def crop_image():
-    try:
-        data = request.json
-        input_file = os.path.join(app.config["UPLOAD_FOLDER"], data["filename"])
-        
-        output_file = image_editor.crop_image(
-            input_file,
-            app.config["OUTPUT_FOLDER"],
-            data["x"],
-            data["y"],
-            data["width"],
-            data["height"]
-        )
-        
-        return jsonify({
-            "success": True,
-            "output_file": os.path.basename(output_file)
-        })
-    
-    except Exception as e:
-        logger.error(f"Crop error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-# =================== OCR ===================
-@app.route("/api/ocr", methods=["POST"])
-def perform_ocr():
-    try:
-        data = request.json
-        input_file = os.path.join(app.config["UPLOAD_FOLDER"], data["filename"])
-        
-        text = ocr_processor.extract_text(
-            input_file,
-            data.get("language", "eng")
-        )
-        
-        return jsonify({
-            "success": True,
-            "text": text,
-            "length": len(text)
-        })
-    
-    except Exception as e:
-        logger.error(f"OCR error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-# =================== DOCUMENT MERGE ===================
-@app.route("/api/merge", methods=["POST"])
-def merge_documents():
-    try:
-        data = request.json
-        input_files = [os.path.join(app.config["UPLOAD_FOLDER"], f) for f in data["files"]]
-        file_type = data["file_type"]
-        
-        if file_type == "pdf":
-            output_file = merger.merge_pdfs(input_files, app.config["OUTPUT_FOLDER"])
-        elif file_type in ["docx", "doc"]:
-            output_file = merger.merge_word_docs(input_files, app.config["OUTPUT_FOLDER"])
-        elif file_type in ["xlsx", "xls"]:
-            output_file = merger.merge_excel_files(input_files, app.config["OUTPUT_FOLDER"])
-        elif file_type in ["jpg", "jpeg", "png", "gif", "bmp"]:
-            output_file = merger.merge_images(input_files, app.config["OUTPUT_FOLDER"])
-        else:
-            return jsonify({"error": "Unsupported file type for merging"}), 400
-        
-        return jsonify({
-            "success": True,
-            "output_file": os.path.basename(output_file)
-        })
-    
-    except Exception as e:
-        logger.error(f"Merge error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-# =================== DOWNLOAD ===================
-@app.route("/api/download/<filename>", methods=["GET"])
-def download_file(filename):
-    try:
-        filepath = os.path.join(app.config["OUTPUT_FOLDER"], filename)
-        if not os.path.exists(filepath):
-            return jsonify({"error": "File not found"}), 404
-        
-        return send_file(filepath, as_attachment=True)
-    
-    except Exception as e:
-        logger.error(f"Download error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-# =================== INFO ===================
-@app.route("/api/info/<filename>", methods=["GET"])
-def get_file_info(filename):
-    try:
-        filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-        if not os.path.exists(filepath):
-            return jsonify({"error": "File not found"}), 404
-        
-        file_type = detect_file_type(filepath)
-        size = os.path.getsize(filepath)
-        
-        info = {
-            "filename": filename,
-            "file_type": file_type,
-            "size": size,
-            "size_formatted": format_file_size(size)
-        }
-        
-        # Get additional info based on file type
-        if file_type == "pdf":
-            import PyPDF2
-            with open(filepath, 'rb') as f:
-                pdf = PyPDF2.PdfReader(f)
-                info["pages"] = len(pdf.pages)
-                info["encrypted"] = pdf.is_encrypted
-        
-        elif file_type in ["jpg", "jpeg", "png", "gif", "bmp"]:
-            from PIL import Image
-            with Image.open(filepath) as img:
-                info["dimensions"] = img.size
-                info["format"] = img.format
-                info["mode"] = img.mode
-        
-        return jsonify(info)
-    
-    except Exception as e:
-        logger.error(f"Info error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-# =================== UTILITIES ===================
-def format_file_size(size_bytes):
-    for unit in ['B', 'KB', 'MB', 'GB']:
-        if size_bytes < 1024.0:
-            return f"{size_bytes:.2f} {unit}"
-        size_bytes /= 1024.0
-    return f"{size_bytes:.2f} TB"
-
-# =================== ERROR HANDLERS ===================
-@app.errorhandler(413)
-def request_entity_too_large(error):
-    return jsonify({"error": "File too large. Maximum size is 100MB"}), 413
-
-@app.errorhandler(500)
-def internal_server_error(error):
-    return jsonify({"error": "Internal server error"}), 500
-
+# ================= RUN =================
 if __name__ == "__main__":
-    # Get port from environment variable (Render provides PORT)
-    port = int(os.environ.get("PORT", 5000))
-    app.run(debug=False, host="0.0.0.0", port=port)
+    app.run(debug=True)
