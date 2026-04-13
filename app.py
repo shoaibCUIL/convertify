@@ -29,10 +29,13 @@ def index():
 @app.route("/merge", methods=["POST"])
 def merge_pdf():
     try:
+        if "files" not in request.files:
+            return "No files uploaded", 400
+
         files = request.files.getlist("files")
 
         if not files or files[0].filename == "":
-            return "No files uploaded", 400
+            return "No files selected", 400
 
         merger = PdfMerger()
 
@@ -54,10 +57,13 @@ def merge_pdf():
         return jsonify({"error": str(e)}), 500
 
 
-# ================= PDF SPLIT (ZIP DOWNLOAD) =================
+# ================= PDF SPLIT (FIXED + ZIP) =================
 @app.route("/split", methods=["POST"])
 def split_pdf():
     try:
+        if "file" not in request.files:
+            return "No file uploaded", 400
+
         file = request.files["file"]
 
         if file.filename == "":
@@ -69,29 +75,28 @@ def split_pdf():
 
         reader = PdfReader(pdf_path)
 
+        if len(reader.pages) == 0:
+            return "Invalid or empty PDF", 400
+
         unique_id = str(uuid.uuid4())
-        split_folder = os.path.join(app.config["OUTPUT_FOLDER"], unique_id)
-        os.makedirs(split_folder, exist_ok=True)
-
-        output_files = []
-
-        for i, page in enumerate(reader.pages):
-            writer = PdfWriter()
-            writer.add_page(page)
-
-            output_path = os.path.join(split_folder, f"page_{i+1}.pdf")
-
-            with open(output_path, "wb") as f:
-                writer.write(f)
-
-            output_files.append(output_path)
-
-        # Create ZIP
         zip_path = os.path.join(app.config["OUTPUT_FOLDER"], f"{unique_id}.zip")
 
         with zipfile.ZipFile(zip_path, "w") as zipf:
-            for file in output_files:
-                zipf.write(file, os.path.basename(file))
+            for i, page in enumerate(reader.pages):
+                writer = PdfWriter()
+                writer.add_page(page)
+
+                temp_pdf = os.path.join(
+                    app.config["OUTPUT_FOLDER"], f"{unique_id}_page_{i+1}.pdf"
+                )
+
+                with open(temp_pdf, "wb") as f:
+                    writer.write(f)
+
+                zipf.write(temp_pdf, f"page_{i+1}.pdf")
+
+                # cleanup temp file
+                os.remove(temp_pdf)
 
         return send_file(zip_path, as_attachment=True)
 
@@ -99,11 +104,11 @@ def split_pdf():
         return jsonify({"error": str(e)}), 500
 
 
-# ================= DOCX → PDF (DISABLED FOR RENDER) =================
+# ================= DOCX → PDF (SAFE HANDLING) =================
 @app.route("/docx-to-pdf", methods=["POST"])
 def docx_to_pdf():
     return jsonify({
-        "error": "DOCX to PDF conversion is temporarily disabled on this server. Requires LibreOffice (Docker setup needed)."
+        "message": "DOCX to PDF is currently disabled on this server. Requires LibreOffice/Docker setup."
     }), 501
 
 
