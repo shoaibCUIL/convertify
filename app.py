@@ -9,8 +9,8 @@ from flask_cors import CORS
 # ================= INIT =================
 app = Flask(__name__)
 
-# ✅ ENABLE CORS (IMPORTANT FOR WORDPRESS)
-CORS(app)
+# ✅ FIX CORS FOR WORDPRESS (VERY IMPORTANT)
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 UPLOAD_FOLDER = "uploads"
 OUTPUT_FOLDER = "outputs"
@@ -33,12 +33,12 @@ def index():
 def merge_pdf():
     try:
         if "files" not in request.files:
-            return "No files uploaded", 400
+            return jsonify({"error": "No files uploaded"}), 400
 
         files = request.files.getlist("files")
 
         if not files or files[0].filename == "":
-            return "No files selected", 400
+            return jsonify({"error": "No files selected"}), 400
 
         merger = PdfMerger()
 
@@ -60,22 +60,22 @@ def merge_pdf():
         return jsonify({"error": str(e)}), 500
 
 
-# ================= PDF SPLIT (RANGE BASED) =================
+# ================= PDF SPLIT =================
 @app.route("/split", methods=["POST"])
 def split_pdf():
     try:
         if "file" not in request.files:
-            return "No file uploaded", 400
+            return jsonify({"error": "No file uploaded"}), 400
 
         file = request.files["file"]
         start_page = request.form.get("start_page")
         end_page = request.form.get("end_page")
 
         if file.filename == "":
-            return "No file selected", 400
+            return jsonify({"error": "No file selected"}), 400
 
         if not start_page or not end_page:
-            return "Please provide page range", 400
+            return jsonify({"error": "Please provide page range"}), 400
 
         start_page = int(start_page)
         end_page = int(end_page)
@@ -88,7 +88,9 @@ def split_pdf():
         total_pages = len(reader.pages)
 
         if start_page < 1 or end_page > total_pages or start_page > end_page:
-            return f"Invalid range. PDF has {total_pages} pages.", 400
+            return jsonify({
+                "error": f"Invalid range. PDF has {total_pages} pages."
+            }), 400
 
         writer = PdfWriter()
 
@@ -107,18 +109,18 @@ def split_pdf():
         return jsonify({"error": str(e)}), 500
 
 
-# ================= DOCX → PDF (DISABLED SAFE) =================
+# ================= DOCX (DISABLED SAFE) =================
 @app.route("/docx-to-pdf", methods=["POST"])
 def docx_to_pdf():
     return jsonify({
-        "message": "DOCX to PDF is currently disabled on this server (requires Docker + LibreOffice)."
+        "message": "DOCX to PDF is disabled on this server (needs Docker + LibreOffice)."
     }), 501
 
 
-# ================= HEALTH CHECK =================
+# ================= HEALTH =================
 @app.route("/health")
 def health():
-    return {"status": "running"}
+    return jsonify({"status": "running"})
 
 
 # ================= RUN =================
