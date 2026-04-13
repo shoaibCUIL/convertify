@@ -1,209 +1,88 @@
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+<!-- PDF.js CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
 <style>
-.convertify-container {
-    font-family: 'Poppins', sans-serif;
-    max-width: 1100px;
-    margin: auto;
-    padding: 20px;
-}
-
-.convertify-header {
-    text-align: center;
-    margin-bottom: 30px;
-}
-
-.convertify-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 20px;
-}
-
-.convertify-card {
-    background: white;
-    padding: 20px;
-    border-radius: 12px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.08);
-}
-
-.convertify-card input {
-    width: 100%;
+.preview-container {
     margin-top: 10px;
-    padding: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
 }
 
-.convertify-card button {
-    width: 100%;
-    margin-top: 15px;
-    padding: 12px;
-    background: #2563eb;
-    color: white;
-    border: none;
+canvas {
+    border: 1px solid #ddd;
     border-radius: 6px;
-    cursor: pointer;
-}
-
-.preview {
-    margin-top: 10px;
-    font-size: 14px;
-    color: #374151;
-}
-
-.loader {
-    display: none;
-    margin-top: 10px;
-    text-align: center;
-    color: #2563eb;
+    width: 120px;
 }
 </style>
 
-<div class="convertify-container">
+<!-- MERGE -->
+<div>
+    <h2>Merge PDFs</h2>
+    <input type="file" id="mergeFiles" multiple onchange="previewMergePDF()">
+    <div class="preview-container" id="mergePreview"></div>
+</div>
 
-    <div class="convertify-header">
-        <h1>Convertify 🚀</h1>
-        <p>Merge & Split PDFs instantly</p>
-    </div>
-
-    <div class="convertify-grid">
-
-        <!-- MERGE -->
-        <div class="convertify-card">
-            <h2>Merge PDFs</h2>
-            <input type="file" id="mergeFiles" multiple onchange="previewMerge()">
-            
-            <div class="preview" id="mergePreview"></div>
-
-            <button onclick="mergePDF()">Merge</button>
-            <div class="loader" id="mergeLoader">Processing...</div>
-        </div>
-
-        <!-- SPLIT -->
-        <div class="convertify-card">
-            <h2>Split PDF</h2>
-            <input type="file" id="splitFile" onchange="previewSplit()">
-            
-            <div class="preview" id="splitPreview"></div>
-
-            <input type="number" id="startPage" placeholder="Start Page">
-            <input type="number" id="endPage" placeholder="End Page">
-
-            <button onclick="splitPDF()">Split</button>
-            <div class="loader" id="splitLoader">Processing...</div>
-        </div>
-
-    </div>
+<!-- SPLIT -->
+<div>
+    <h2>Split PDF</h2>
+    <input type="file" id="splitFile" onchange="previewSplitPDF()">
+    <div class="preview-container" id="splitPreview"></div>
 </div>
 
 <script>
 const BASE_URL = "https://convertify-ci3g.onrender.com";
 
-// ================= PREVIEW MERGE =================
-function previewMerge() {
+// ================= LOAD PDF PREVIEW =================
+async function renderPDF(file, containerId) {
+    const fileReader = new FileReader();
+
+    fileReader.onload = async function() {
+        const typedarray = new Uint8Array(this.result);
+
+        const pdf = await pdfjsLib.getDocument(typedarray).promise;
+        const page = await pdf.getPage(1);
+
+        const viewport = page.getViewport({ scale: 0.5 });
+
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        await page.render({
+            canvasContext: context,
+            viewport: viewport
+        }).promise;
+
+        document.getElementById(containerId).appendChild(canvas);
+    };
+
+    fileReader.readAsArrayBuffer(file);
+}
+
+// ================= MERGE PREVIEW =================
+function previewMergePDF() {
     const files = document.getElementById("mergeFiles").files;
-    let preview = document.getElementById("mergePreview");
+    const container = document.getElementById("mergePreview");
 
-    if (files.length === 0) {
-        preview.innerHTML = "";
-        return;
-    }
+    container.innerHTML = "";
 
-    let names = [];
     for (let file of files) {
-        names.push(file.name);
+        renderPDF(file, "mergePreview");
     }
-
-    preview.innerHTML = `<strong>${files.length} file(s):</strong><br>` + names.join("<br>");
 }
 
-// ================= PREVIEW SPLIT =================
-function previewSplit() {
+// ================= SPLIT PREVIEW =================
+function previewSplitPDF() {
     const file = document.getElementById("splitFile").files[0];
-    let preview = document.getElementById("splitPreview");
+    const container = document.getElementById("splitPreview");
 
-    if (!file) {
-        preview.innerHTML = "";
-        return;
+    container.innerHTML = "";
+
+    if (file) {
+        renderPDF(file, "splitPreview");
     }
-
-    preview.innerHTML = `<strong>Selected:</strong> ${file.name}`;
-}
-
-// ================= LOADER =================
-function showLoader(id, show) {
-    document.getElementById(id).style.display = show ? "block" : "none";
-}
-
-// ================= MERGE =================
-async function mergePDF() {
-    const files = document.getElementById("mergeFiles").files;
-
-    if (files.length === 0) return alert("Select files");
-
-    showLoader("mergeLoader", true);
-
-    let formData = new FormData();
-    for (let file of files) {
-        formData.append("files", file);
-    }
-
-    try {
-        let response = await fetch(BASE_URL + "/merge", {
-            method: "POST",
-            body: formData
-        });
-
-        if (!response.ok) throw new Error(await response.text());
-
-        let blob = await response.blob();
-        let url = URL.createObjectURL(blob);
-
-        let a = document.createElement("a");
-        a.href = url;
-        a.download = "merged.pdf";
-        a.click();
-
-    } catch (e) {
-        alert("Error: " + e.message);
-    }
-
-    showLoader("mergeLoader", false);
-}
-
-// ================= SPLIT =================
-async function splitPDF() {
-    const file = document.getElementById("splitFile").files[0];
-    const start = document.getElementById("startPage").value;
-    const end = document.getElementById("endPage").value;
-
-    if (!file || !start || !end) return alert("Fill all fields");
-
-    showLoader("splitLoader", true);
-
-    let formData = new FormData();
-    formData.append("file", file);
-    formData.append("start_page", start);
-    formData.append("end_page", end);
-
-    try {
-        let response = await fetch(BASE_URL + "/split", {
-            method: "POST",
-            body: formData
-        });
-
-        if (!response.ok) throw new Error(await response.text());
-
-        let blob = await response.blob();
-        let url = URL.createObjectURL(blob);
-
-        let a = document.createElement("a");
-        a.href = url;
-        a.download = "split.pdf";
-        a.click();
-
-    } catch (e) {
-        alert("Error: " + e.message);
-    }
-
-    showLoader("splitLoader", false);
 }
 </script>
