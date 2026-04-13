@@ -1,244 +1,27 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>File Converter & Editor - All-in-One Tool</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <title>PDF Tools</title>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🔧 File Converter & Editor Pro</h1>
-            <p>Convert, Edit, Merge, Split, Compress & More!</p>
-        </header>
 
-        <div class="tabs">
-            <button class="tab-button active" onclick="openTab('convert')">Convert</button>
-            <button class="tab-button" onclick="openTab('edit')">Edit PDF</button>
-            <button class="tab-button" onclick="openTab('merge')">Merge</button>
-            <button class="tab-button" onclick="openTab('split')">Split</button>
-            <button class="tab-button" onclick="openTab('compress')">Compress</button>
-            <button class="tab-button" onclick="openTab('watermark')">Watermark</button>
-            <button class="tab-button" onclick="openTab('protect')">Protect</button>
-            <button class="tab-button" onclick="openTab('extract')">Extract</button>
-            <button class="tab-button" onclick="openTab('ocr')">OCR</button>
-            <button class="tab-button" onclick="openTab('image')">Edit Image</button>
-        </div>
+<h2>Merge PDFs</h2>
+<form action="/merge" method="post" enctype="multipart/form-data">
+    <input type="file" name="files" multiple>
+    <button type="submit">Merge</button>
+</form>
 
-        <!-- Convert Tab -->
-        <div id="convert" class="tab-content active">
-            <h2>Convert Files</h2>
-            <div class="upload-section">
-                <input type="file" id="convertFile" accept="*/*">
-                <select id="targetFormat">
-                    <option value="">Select target format...</option>
-                    <optgroup label="Documents">
-                        <option value="pdf">PDF</option>
-                        <option value="docx">DOCX (Word)</option>
-                        <option value="txt">TXT</option>
-                        <option value="html">HTML</option>
-                    </optgroup>
-                    <optgroup label="Images">
-                        <option value="jpg">JPG</option>
-                        <option value="png">PNG</option>
-                        <option value="gif">GIF</option>
-                        <option value="bmp">BMP</option>
-                        <option value="webp">WebP</option>
-                    </optgroup>
-                    <optgroup label="Spreadsheets">
-                        <option value="xlsx">XLSX (Excel)</option>
-                        <option value="csv">CSV</option>
-                    </optgroup>
-                </select>
-                <button onclick="convertFile()">Convert</button>
-            </div>
-        </div>
+<h2>Split PDF</h2>
+<form action="/split" method="post" enctype="multipart/form-data">
+    <input type="file" name="file">
+    <button type="submit">Split</button>
+</form>
 
-        <!-- Edit PDF Tab -->
-        <div id="edit" class="tab-content">
-            <h2>Edit PDF</h2>
-            <div class="upload-section">
-                <input type="file" id="editFile" accept=".pdf">
-                
-                <div class="edit-options">
-                    <h3>Rotate Pages</h3>
-                    <select id="rotateAngle">
-                        <option value="90">90° Clockwise</option>
-                        <option value="180">180°</option>
-                        <option value="270">270° (90° Counter-clockwise)</option>
-                    </select>
-                    <input type="text" id="rotatePages" placeholder="Pages (e.g., 1,3-5 or 'all')">
-                    <button onclick="rotatePDF()">Rotate</button>
+<h2>DOCX to PDF</h2>
+<form action="/docx-to-pdf" method="post" enctype="multipart/form-data">
+    <input type="file" name="file">
+    <button type="submit">Convert</button>
+</form>
 
-                    <h3>Delete Pages</h3>
-                    <input type="text" id="deletePages" placeholder="Pages to delete (e.g., 1,3,5)">
-                    <button onclick="deletePDFPages()">Delete Pages</button>
-
-                    <h3>Add Page Numbers</h3>
-                    <select id="pageNumPosition">
-                        <option value="bottom-right">Bottom Right</option>
-                        <option value="bottom-center">Bottom Center</option>
-                        <option value="bottom-left">Bottom Left</option>
-                        <option value="top-right">Top Right</option>
-                        <option value="top-center">Top Center</option>
-                        <option value="top-left">Top Left</option>
-                    </select>
-                    <button onclick="addPageNumbers()">Add Numbers</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Merge Tab -->
-        <div id="merge" class="tab-content">
-            <h2>Merge Files</h2>
-            <div class="upload-section">
-                <input type="file" id="mergeFiles" multiple accept="*/*">
-                <select id="mergeType">
-                    <option value="pdf">PDF Files</option>
-                    <option value="docx">Word Documents</option>
-                    <option value="xlsx">Excel Files</option>
-                    <option value="images">Images</option>
-                </select>
-                <button onclick="mergeFiles()">Merge</button>
-            </div>
-        </div>
-
-        <!-- Split Tab -->
-        <div id="split" class="tab-content">
-            <h2>Split PDF</h2>
-            <div class="upload-section">
-                <input type="file" id="splitFile" accept=".pdf">
-                <select id="splitType">
-                    <option value="all">Every Page</option>
-                    <option value="half">Split in Half</option>
-                    <option value="range">Custom Range</option>
-                    <option value="every_2">Every 2 Pages</option>
-                    <option value="every_5">Every 5 Pages</option>
-                </select>
-                <input type="text" id="splitRange" placeholder="Range (e.g., 1-3,5,7-10)" style="display:none;">
-                <button onclick="splitPDF()">Split</button>
-            </div>
-        </div>
-
-        <!-- Compress Tab -->
-        <div id="compress" class="tab-content">
-            <h2>Compress Files</h2>
-            <div class="upload-section">
-                <input type="file" id="compressFile" accept=".pdf,.jpg,.jpeg,.png">
-                <select id="compressQuality">
-                    <option value="low">Low Quality (Smaller Size)</option>
-                    <option value="medium">Medium Quality</option>
-                    <option value="high">High Quality (Larger Size)</option>
-                </select>
-                <button onclick="compressFile()">Compress</button>
-            </div>
-        </div>
-
-        <!-- Watermark Tab -->
-        <div id="watermark" class="tab-content">
-            <h2>Add Watermark</h2>
-            <div class="upload-section">
-                <input type="file" id="watermarkFile" accept=".pdf,.jpg,.jpeg,.png">
-                <input type="text" id="watermarkText" placeholder="Watermark text" value="CONFIDENTIAL">
-                <select id="watermarkPosition">
-                    <option value="center">Center</option>
-                    <option value="top-left">Top Left</option>
-                    <option value="top-right">Top Right</option>
-                    <option value="bottom-left">Bottom Left</option>
-                    <option value="bottom-right">Bottom Right</option>
-                </select>
-                <label>Opacity: <input type="range" id="watermarkOpacity" min="0" max="100" value="30"></label>
-                <button onclick="addWatermark()">Add Watermark</button>
-            </div>
-        </div>
-
-        <!-- Protect Tab -->
-        <div id="protect" class="tab-content">
-            <h2>Protect/Unlock PDF</h2>
-            <div class="upload-section">
-                <h3>Protect PDF</h3>
-                <input type="file" id="protectFile" accept=".pdf">
-                <input type="password" id="protectPassword" placeholder="Password">
-                <button onclick="protectPDF()">Protect</button>
-
-                <h3>Unlock PDF</h3>
-                <input type="file" id="unlockFile" accept=".pdf">
-                <input type="password" id="unlockPassword" placeholder="Password">
-                <button onclick="unlockPDF()">Unlock</button>
-            </div>
-        </div>
-
-        <!-- Extract Tab -->
-        <div id="extract" class="tab-content">
-            <h2>Extract Content</h2>
-            <div class="upload-section">
-                <input type="file" id="extractFile" accept=".pdf">
-                <select id="extractType">
-                    <option value="text">Extract Text</option>
-                    <option value="images">Extract Images</option>
-                    <option value="tables">Extract Tables</option>
-                    <option value="metadata">Extract Metadata</option>
-                </select>
-                <button onclick="extractContent()">Extract</button>
-            </div>
-        </div>
-
-        <!-- OCR Tab -->
-        <div id="ocr" class="tab-content">
-            <h2>OCR - Extract Text from Images</h2>
-            <div class="upload-section">
-                <input type="file" id="ocrFile" accept=".jpg,.jpeg,.png,.pdf">
-                <select id="ocrLanguage">
-                    <option value="eng">English</option>
-                    <option value="spa">Spanish</option>
-                    <option value="fra">French</option>
-                    <option value="deu">German</option>
-                    <option value="chi_sim">Chinese (Simplified)</option>
-                </select>
-                <button onclick="performOCR()">Extract Text</button>
-            </div>
-        </div>
-
-        <!-- Edit Image Tab -->
-        <div id="image" class="tab-content">
-            <h2>Edit Image</h2>
-            <div class="upload-section">
-                <input type="file" id="imageFile" accept=".jpg,.jpeg,.png,.gif,.bmp">
-                
-                <div class="edit-options">
-                    <h3>Resize</h3>
-                    <input type="number" id="resizeWidth" placeholder="Width">
-                    <input type="number" id="resizeHeight" placeholder="Height">
-                    <label><input type="checkbox" id="maintainAspect" checked> Maintain aspect ratio</label>
-                    <button onclick="resizeImage()">Resize</button>
-
-                    <h3>Crop</h3>
-                    <input type="number" id="cropX" placeholder="X" value="0">
-                    <input type="number" id="cropY" placeholder="Y" value="0">
-                    <input type="number" id="cropWidth" placeholder="Width">
-                    <input type="number" id="cropHeight" placeholder="Height">
-                    <button onclick="cropImage()">Crop</button>
-
-                    <h3>Rotate/Flip</h3>
-                    <button onclick="rotateImage(90)">Rotate 90°</button>
-                    <button onclick="flipImage('horizontal')">Flip Horizontal</button>
-                    <button onclick="flipImage('vertical')">Flip Vertical</button>
-                </div>
-            </div>
-        </div>
-
-        <div id="results" class="results">
-            <h3>Results</h3>
-            <div id="resultContent"></div>
-        </div>
-
-        <div id="loading" class="loading" style="display:none;">
-            <div class="spinner"></div>
-            <p>Processing...</p>
-        </div>
-    </div>
-
-    <script src="/static/js/app.js"></script>
 </body>
 </html>

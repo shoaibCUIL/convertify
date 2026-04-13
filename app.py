@@ -1,7 +1,6 @@
 import os
 import uuid
 import zipfile
-import subprocess
 
 from flask import Flask, request, render_template, send_file, jsonify
 from werkzeug.utils import secure_filename
@@ -100,47 +99,12 @@ def split_pdf():
         return jsonify({"error": str(e)}), 500
 
 
-# ================= DOCX → PDF (LIBREOFFICE) =================
+# ================= DOCX → PDF (DISABLED FOR RENDER) =================
 @app.route("/docx-to-pdf", methods=["POST"])
 def docx_to_pdf():
-    try:
-        file = request.files["file"]
-
-        if file.filename == "":
-            return "No file uploaded", 400
-
-        filename = secure_filename(file.filename)
-        input_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-        file.save(input_path)
-
-        # Output folder
-        output_dir = app.config["OUTPUT_FOLDER"]
-
-        # Convert using LibreOffice
-        subprocess.run([
-            "libreoffice",
-            "--headless",
-            "--convert-to",
-            "pdf",
-            input_path,
-            "--outdir",
-            output_dir
-        ], check=True)
-
-        # Find generated PDF
-        base_name = os.path.splitext(filename)[0]
-        output_path = os.path.join(output_dir, base_name + ".pdf")
-
-        if not os.path.exists(output_path):
-            return "Conversion failed", 500
-
-        return send_file(output_path, as_attachment=True)
-
-    except subprocess.CalledProcessError:
-        return jsonify({"error": "LibreOffice conversion failed"}), 500
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify({
+        "error": "DOCX to PDF conversion is temporarily disabled on this server. Requires LibreOffice (Docker setup needed)."
+    }), 501
 
 
 # ================= HEALTH CHECK =================
