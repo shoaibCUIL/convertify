@@ -4,11 +4,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
 
 <style>
-body {
-    font-family: 'Poppins', sans-serif;
-}
-
 .convertify-container {
+    font-family: 'Poppins', sans-serif;
     max-width: 1100px;
     margin: auto;
     padding: 20px;
@@ -62,33 +59,41 @@ button {
     border: none;
     border-radius: 6px;
 }
+
+.section {
+    margin-bottom: 40px;
+}
 </style>
 
 <div class="convertify-container">
 
+<!-- MERGE -->
+<div class="section">
 <h2>Merge PDFs</h2>
 
 <div class="drop-zone" onclick="document.getElementById('mergeInput').click()">
     Drag & Drop PDFs or Click
 </div>
 
-<input type="file" id="mergeInput" multiple hidden onchange="handleFiles(event)">
+<input type="file" id="mergeInput" multiple hidden>
 
 <div class="preview-grid" id="mergePreview"></div>
 
 <button onclick="mergePDF()">Merge PDFs</button>
+</div>
 
-<hr>
-
+<!-- SPLIT -->
+<div class="section">
 <h2>Split PDF</h2>
 
-<input type="file" id="splitInput" onchange="previewSplit(event)">
+<input type="file" id="splitInput">
 <div id="splitPreview"></div>
 
 <input type="number" id="startPage" placeholder="Start Page">
 <input type="number" id="endPage" placeholder="End Page">
 
 <button onclick="splitPDF()">Split PDF</button>
+</div>
 
 </div>
 
@@ -98,28 +103,26 @@ const BASE_URL = "https://convertify-production-5104.up.railway.app";
 let mergeFiles = [];
 
 // ================= DRAG DROP =================
-document.querySelector(".drop-zone").addEventListener("dragover", e => {
-    e.preventDefault();
-});
+document.querySelector(".drop-zone").addEventListener("dragover", e => e.preventDefault());
 
 document.querySelector(".drop-zone").addEventListener("drop", e => {
     e.preventDefault();
-    handleFileList(e.dataTransfer.files);
+    handleFiles(e.dataTransfer.files);
+});
+
+document.getElementById("mergeInput").addEventListener("change", (e) => {
+    handleFiles(e.target.files);
 });
 
 // ================= HANDLE FILES =================
-function handleFiles(event) {
-    handleFileList(event.target.files);
-}
-
-function handleFileList(files) {
+function handleFiles(files) {
     for (let file of files) {
         mergeFiles.push(file);
     }
     renderMergePreview();
 }
 
-// ================= RENDER PREVIEW =================
+// ================= PREVIEW =================
 function renderMergePreview() {
     const container = document.getElementById("mergePreview");
     container.innerHTML = "";
@@ -129,12 +132,16 @@ function renderMergePreview() {
         div.className = "preview-item";
         div.draggable = true;
 
-        div.ondragstart = () => div.dataset.index = index;
+        div.ondragstart = (e) => {
+            e.dataTransfer.setData("index", index);
+        };
 
         div.ondrop = (e) => {
-            let from = e.dataTransfer.getData("text");
-            let to = index;
-            [mergeFiles[from], mergeFiles[to]] = [mergeFiles[to], mergeFiles[from]];
+            e.preventDefault();
+            let from = e.dataTransfer.getData("index");
+            let temp = mergeFiles[from];
+            mergeFiles[from] = mergeFiles[index];
+            mergeFiles[index] = temp;
             renderMergePreview();
         };
 
@@ -165,6 +172,7 @@ async function renderPDF(file, container) {
 
         const canvas = document.createElement("canvas");
         const ctx = canvas.getContext("2d");
+
         const viewport = page.getViewport({ scale: 0.5 });
 
         canvas.width = viewport.width;
@@ -180,6 +188,8 @@ async function renderPDF(file, container) {
 
 // ================= MERGE =================
 async function mergePDF() {
+    if (mergeFiles.length === 0) return alert("Select files");
+
     let formData = new FormData();
     mergeFiles.forEach(f => formData.append("files", f));
 
@@ -198,19 +208,21 @@ async function mergePDF() {
 }
 
 // ================= SPLIT PREVIEW =================
-function previewSplit(event) {
-    const file = event.target.files[0];
+document.getElementById("splitInput").addEventListener("change", function(e) {
+    const file = e.target.files[0];
     const container = document.getElementById("splitPreview");
     container.innerHTML = "";
 
-    renderPDF(file, container);
-}
+    if (file) renderPDF(file, container);
+});
 
 // ================= SPLIT =================
 async function splitPDF() {
     let file = document.getElementById("splitInput").files[0];
     let start = document.getElementById("startPage").value;
     let end = document.getElementById("endPage").value;
+
+    if (!file || !start || !end) return alert("Fill all fields");
 
     let formData = new FormData();
     formData.append("file", file);
