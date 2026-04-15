@@ -1,88 +1,233 @@
-<!-- PDF.js CDN -->
+<!-- PDF.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+
 <style>
-.preview-container {
-    margin-top: 10px;
+body {
+    font-family: 'Poppins', sans-serif;
+}
+
+.convertify-container {
+    max-width: 1100px;
+    margin: auto;
+    padding: 20px;
+}
+
+.drop-zone {
+    border: 2px dashed #ccc;
+    padding: 30px;
+    text-align: center;
+    border-radius: 10px;
+    cursor: pointer;
+    margin-bottom: 15px;
+}
+
+.preview-grid {
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
 }
 
-canvas {
-    border: 1px solid #ddd;
-    border-radius: 6px;
+.preview-item {
+    position: relative;
     width: 120px;
+    cursor: grab;
+}
+
+.preview-item canvas {
+    width: 100%;
+    border-radius: 6px;
+}
+
+.remove-btn {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: red;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+button {
+    margin-top: 15px;
+    padding: 12px;
+    width: 100%;
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 6px;
 }
 </style>
 
-<!-- MERGE -->
-<div>
-    <h2>Merge PDFs</h2>
-    <input type="file" id="mergeFiles" multiple onchange="previewMergePDF()">
-    <div class="preview-container" id="mergePreview"></div>
+<div class="convertify-container">
+
+<h2>Merge PDFs</h2>
+
+<div class="drop-zone" onclick="document.getElementById('mergeInput').click()">
+    Drag & Drop PDFs or Click
 </div>
 
-<!-- SPLIT -->
-<div>
-    <h2>Split PDF</h2>
-    <input type="file" id="splitFile" onchange="previewSplitPDF()">
-    <div class="preview-container" id="splitPreview"></div>
+<input type="file" id="mergeInput" multiple hidden onchange="handleFiles(event)">
+
+<div class="preview-grid" id="mergePreview"></div>
+
+<button onclick="mergePDF()">Merge PDFs</button>
+
+<hr>
+
+<h2>Split PDF</h2>
+
+<input type="file" id="splitInput" onchange="previewSplit(event)">
+<div id="splitPreview"></div>
+
+<input type="number" id="startPage" placeholder="Start Page">
+<input type="number" id="endPage" placeholder="End Page">
+
+<button onclick="splitPDF()">Split PDF</button>
+
 </div>
 
 <script>
-const BASE_URL = "https://convertify-ci3g.onrender.com";
+const BASE_URL = "https://convertify-production-5104.up.railway.app";
 
-// ================= LOAD PDF PREVIEW =================
-async function renderPDF(file, containerId) {
-    const fileReader = new FileReader();
+let mergeFiles = [];
 
-    fileReader.onload = async function() {
-        const typedarray = new Uint8Array(this.result);
+// ================= DRAG DROP =================
+document.querySelector(".drop-zone").addEventListener("dragover", e => {
+    e.preventDefault();
+});
 
-        const pdf = await pdfjsLib.getDocument(typedarray).promise;
-        const page = await pdf.getPage(1);
+document.querySelector(".drop-zone").addEventListener("drop", e => {
+    e.preventDefault();
+    handleFileList(e.dataTransfer.files);
+});
 
-        const viewport = page.getViewport({ scale: 0.5 });
-
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d");
-
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-
-        await page.render({
-            canvasContext: context,
-            viewport: viewport
-        }).promise;
-
-        document.getElementById(containerId).appendChild(canvas);
-    };
-
-    fileReader.readAsArrayBuffer(file);
+// ================= HANDLE FILES =================
+function handleFiles(event) {
+    handleFileList(event.target.files);
 }
 
-// ================= MERGE PREVIEW =================
-function previewMergePDF() {
-    const files = document.getElementById("mergeFiles").files;
-    const container = document.getElementById("mergePreview");
+function handleFileList(files) {
+    for (let file of files) {
+        mergeFiles.push(file);
+    }
+    renderMergePreview();
+}
 
+// ================= RENDER PREVIEW =================
+function renderMergePreview() {
+    const container = document.getElementById("mergePreview");
     container.innerHTML = "";
 
-    for (let file of files) {
-        renderPDF(file, "mergePreview");
-    }
+    mergeFiles.forEach((file, index) => {
+        const div = document.createElement("div");
+        div.className = "preview-item";
+        div.draggable = true;
+
+        div.ondragstart = () => div.dataset.index = index;
+
+        div.ondrop = (e) => {
+            let from = e.dataTransfer.getData("text");
+            let to = index;
+            [mergeFiles[from], mergeFiles[to]] = [mergeFiles[to], mergeFiles[from]];
+            renderMergePreview();
+        };
+
+        div.ondragover = (e) => e.preventDefault();
+
+        const remove = document.createElement("button");
+        remove.innerText = "×";
+        remove.className = "remove-btn";
+        remove.onclick = () => {
+            mergeFiles.splice(index, 1);
+            renderMergePreview();
+        };
+
+        renderPDF(file, div);
+
+        div.appendChild(remove);
+        container.appendChild(div);
+    });
+}
+
+// ================= PDF RENDER =================
+async function renderPDF(file, container) {
+    const reader = new FileReader();
+
+    reader.onload = async function() {
+        const pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
+        const page = await pdf.getPage(1);
+
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        const viewport = page.getViewport({ scale: 0.5 });
+
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        container.appendChild(canvas);
+    };
+
+    reader.readAsArrayBuffer(file);
+}
+
+// ================= MERGE =================
+async function mergePDF() {
+    let formData = new FormData();
+    mergeFiles.forEach(f => formData.append("files", f));
+
+    let res = await fetch(BASE_URL + "/merge", {
+        method: "POST",
+        body: formData
+    });
+
+    let blob = await res.blob();
+    let url = URL.createObjectURL(blob);
+
+    let a = document.createElement("a");
+    a.href = url;
+    a.download = "merged.pdf";
+    a.click();
 }
 
 // ================= SPLIT PREVIEW =================
-function previewSplitPDF() {
-    const file = document.getElementById("splitFile").files[0];
+function previewSplit(event) {
+    const file = event.target.files[0];
     const container = document.getElementById("splitPreview");
-
     container.innerHTML = "";
 
-    if (file) {
-        renderPDF(file, "splitPreview");
-    }
+    renderPDF(file, container);
+}
+
+// ================= SPLIT =================
+async function splitPDF() {
+    let file = document.getElementById("splitInput").files[0];
+    let start = document.getElementById("startPage").value;
+    let end = document.getElementById("endPage").value;
+
+    let formData = new FormData();
+    formData.append("file", file);
+    formData.append("start_page", start);
+    formData.append("end_page", end);
+
+    let res = await fetch(BASE_URL + "/split", {
+        method: "POST",
+        body: formData
+    });
+
+    let blob = await res.blob();
+    let url = URL.createObjectURL(blob);
+
+    let a = document.createElement("a");
+    a.href = url;
+    a.download = "split.pdf";
+    a.click();
 }
 </script>
